@@ -2,7 +2,7 @@ import {
   defineAdapter,
   type AdapterIssue,
   type StatusLevel,
-} from "@status-bar/adapter-sdk";
+} from "@statusbar/adapter-sdk";
 
 /** Statuspage `indicator`/incident `impact` → normalized level. */
 function levelForIndicator(indicator: string): StatusLevel {

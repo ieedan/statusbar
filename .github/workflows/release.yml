@@ -114,7 +114,7 @@ jobs:
         run: swift --version
 
       # Builds the release binary, compiles the adapters, and assembles
-      # "dist/Site Status.app" (see scripts/build-app.sh).
+      # "dist/StatusBar.app" (see scripts/build-app.sh).
       - name: Build app bundle
         run: make app
 
@@ -136,8 +136,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          APP="dist/Site Status.app"
-          ASSET="Site-Status-${VERSION}-macos-arm64.zip"
+          APP="dist/StatusBar.app"
+          ASSET="StatusBar-${VERSION}-macos-arm64.zip"
 
           if [ -n "$MAC_CSC_LINK" ]; then
             echo "› Developer ID cert present — signing + notarizing"
@@ -211,7 +211,7 @@ jobs:
           # Tag the exact commit that was built (the run's triggering SHA).
           git tag "$V" "${{ github.sha }}"
           git push origin "$V"
-          TITLE="Site Status $V"
+          TITLE="StatusBar $V"
           if [ -s release-notes.md ]; then
             gh release create "$V" --title "$TITLE" --notes-file release-notes.md \
               --latest "${{ steps.package.outputs.asset }}"

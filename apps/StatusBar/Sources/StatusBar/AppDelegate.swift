@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcons.shape(for: .unknown, filled: false, size: 15, template: true)
-        statusItem.button?.toolTip = "Site Status"
+        statusItem.button?.toolTip = "StatusBar"
         statusItem.menu = NSMenu()
         rebuildMenu()
 
@@ -70,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render() {
         let overall = results.overallLevel(threshold: staleThreshold, now: Date())
         statusItem.button?.image = StatusIcons.shape(for: overall, filled: false, size: 15, template: true)
-        statusItem.button?.toolTip = "Site Status — \(StatusIcons.label(for: overall))"
+        statusItem.button?.toolTip = "StatusBar — \(StatusIcons.label(for: overall))"
         rebuildMenu()
     }
 
@@ -178,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(menu, "Reveal Config in Finder", #selector(revealConfig), key: "")
         add(menu, "Reload Config & Refresh", #selector(reloadConfig), key: "")
         menu.addItem(.separator())
-        add(menu, "Quit Site Status", #selector(quit), key: "q")
+        add(menu, "Quit StatusBar", #selector(quit), key: "q")
 
         statusItem.menu = menu
     }

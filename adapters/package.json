@@ -1,7 +1,7 @@
 {
-  "name": "status-bar-adapters",
+  "name": "statusbar-adapters",
   "private": true,
-  "description": "Built-in Site Status adapters and the adapter SDK.",
+  "description": "Built-in StatusBar adapters and the adapter SDK.",
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc -p statuspage --noEmit && tsc -p aws --noEmit && tsc -p gcp --noEmit",

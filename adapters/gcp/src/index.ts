@@ -2,7 +2,7 @@ import {
   defineAdapter,
   type AdapterIssue,
   type StatusLevel,
-} from "@status-bar/adapter-sdk";
+} from "@statusbar/adapter-sdk";
 
 const severity: Record<StatusLevel, number> = {
   unknown: 0,

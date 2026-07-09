@@ -1,11 +1,11 @@
 # Adapters
 
-An **adapter** teaches Site Status how to read one *kind* of status source — an
+An **adapter** teaches StatusBar how to read one *kind* of status source — an
 Atlassian Statuspage, the AWS Health feed, or anything you can parse from an HTTP
 response. Adapters are small TypeScript modules. You can write your own and drop
 them in without touching the app.
 
-- [`sdk/`](sdk) — `@status-bar/adapter-sdk`: the types and `defineAdapter` helper.
+- [`sdk/`](sdk) — `@statusbar/adapter-sdk`: the types and `defineAdapter` helper.
 - [`statuspage/`](statuspage) — reads any Atlassian Statuspage.
 - [`aws/`](aws) — reads the AWS Health current-events feed.
 
@@ -25,7 +25,7 @@ an isolated JavaScriptCore sandbox with no network or filesystem access.
 ```
 my-adapter/
   adapter.json        # { "id", "name", "description", "entry": "dist/index.js" }
-  package.json        # depends on @status-bar/adapter-sdk
+  package.json        # depends on @statusbar/adapter-sdk
   src/index.ts        # your code — calls defineAdapter(...)
   dist/index.js       # built bundle the app loads (produced by the build)
 ```
@@ -33,7 +33,7 @@ my-adapter/
 ### `src/index.ts`
 
 ```ts
-import { defineAdapter, type StatusLevel } from "@status-bar/adapter-sdk";
+import { defineAdapter, type StatusLevel } from "@statusbar/adapter-sdk";
 
 export default defineAdapter({
   id: "example",
@@ -145,7 +145,15 @@ and any site using its `id` as `adapterID` becomes readable. User adapters
 override built-in ones with the same `id`. Check what's loaded with
 `StatusBar --adapters`.
 
-## Scaffold a new adapter
+## Add a site
 
-Run the `/create-adapter` skill (or copy an existing adapter) to generate a
-starter. For a quick one-off, a single plain `.js` file (above) is enough.
+Run the `/add-site` skill — it reuses an existing adapter when one already covers
+the site, and only scaffolds a new adapter when nothing can read the source. Give
+it the site in plain language:
+
+```
+/add-site Add "GitLab" to my statusbar
+```
+
+To scaffold by hand instead, copy an existing adapter to generate a starter. For a
+quick one-off, a single plain `.js` file (above) is enough.

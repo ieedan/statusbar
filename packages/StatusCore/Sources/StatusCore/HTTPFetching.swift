@@ -24,7 +24,7 @@ public struct URLSessionFetcher: HTTPFetching {
     public func data(from url: URL) async throws -> (Data, Int) {
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
-        request.setValue("status-bar/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("statusbar/1.0", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         return (data, code)

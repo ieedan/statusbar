@@ -1,4 +1,4 @@
-# site-status
+# statusbar
 
 ## 0.1.2
 

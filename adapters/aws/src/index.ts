@@ -2,7 +2,7 @@ import {
   defineAdapter,
   type AdapterIssue,
   type StatusLevel,
-} from "@status-bar/adapter-sdk";
+} from "@statusbar/adapter-sdk";
 
 /**
  * AWS numeric event status → normalized level.

@@ -1,5 +1,5 @@
 /**
- * Site Status — Adapter SDK
+ * StatusBar — Adapter SDK
  *
  * An adapter teaches the app how to read one *kind* of status source (e.g. an
  * Atlassian Statuspage, or the AWS Health feed). Adapters are **pure parsers**:

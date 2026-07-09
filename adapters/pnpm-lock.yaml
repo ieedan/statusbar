@@ -20,13 +20,13 @@ importers:
 
   aws:
     dependencies:
-      '@status-bar/adapter-sdk':
+      '@statusbar/adapter-sdk':
         specifier: workspace:*
         version: link:../sdk
 
   gcp:
     dependencies:
-      '@status-bar/adapter-sdk':
+      '@statusbar/adapter-sdk':
         specifier: workspace:*
         version: link:../sdk
 
@@ -34,7 +34,7 @@ importers:
 
   statuspage:
     dependencies:
-      '@status-bar/adapter-sdk':
+      '@statusbar/adapter-sdk':
         specifier: workspace:*
         version: link:../sdk
 

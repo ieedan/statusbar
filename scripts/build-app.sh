@@ -6,9 +6,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Site Status"
+APP_NAME="StatusBar"
 EXECUTABLE="StatusBar"
-BUNDLE_ID="dev.statusbar.SiteStatus"
+BUNDLE_ID="dev.statusbar.StatusBar"
 # Single source of truth: the version changesets bumps in package.json.
 VERSION="$(node -p "require('$ROOT/package.json').version")"
 
@@ -50,7 +50,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>LSMinimumSystemVersion</key>  <string>13.0</string>
     <key>LSUIElement</key>             <true/>
-    <key>NSHumanReadableCopyright</key><string>Site Status</string>
+    <key>NSHumanReadableCopyright</key><string>StatusBar</string>
 </dict>
 </plist>
 PLIST
