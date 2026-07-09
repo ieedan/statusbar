@@ -21,6 +21,11 @@ if CommandLine.arguments.contains("--check") {
     // semaphore below, which would otherwise deadlock a MainActor task.
     Task.detached {
         let results = await monitor.refresh(config: config)
+        let now = Date()
+        let threshold: TimeInterval =
+            config.demoteStaleIssues
+            ? TimeInterval(max(1, config.staleIssueThresholdHours) * 3600)
+            : .greatestFiniteMagnitude
         let symbol: (StatusLevel) -> String = {
             switch $0 {
             case .major: return "🔴"
@@ -29,14 +34,23 @@ if CommandLine.arguments.contains("--check") {
             case .unknown: return "❔"
             }
         }
-        print("Overall: \(symbol(results.overallLevel)) \(results.overallLevel.rawValue)")
+        let overall = results.overallLevel(threshold: threshold, now: now)
+        print("Overall: \(symbol(overall)) \(overall.rawValue)")
         for status in results {
+            // Per-site row mirrors the menu: honest to the source's own level.
             print(
                 "  \(symbol(status.level)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(status.detail)"
             )
-            for issue in status.issues {
+            let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
+            for issue in fresh {
                 let age = issue.startedAt.map { " (started \(relativeAge($0)))" } ?? ""
                 print("       ↳ \(issue.summary)\(age)")
+            }
+            // Demoted: lingering low-impact issues that have gone quiet. Shown
+            // dimmed so it's obvious what the menu now tucks into a submenu.
+            for issue in stale {
+                let quiet = issue.lastActivity.map { " (quiet since \(relativeAge($0)))" } ?? ""
+                print("       · [low-priority] \(issue.summary)\(quiet)")
             }
         }
         done.signal()

@@ -52,6 +52,7 @@ interface Summary {
     status?: string;
     started_at?: string;
     created_at?: string;
+    updated_at?: string;
     components?: Array<{ name: string; status?: string }>;
   }>;
   components?: Array<{ name: string; status?: string }>;
@@ -76,9 +77,10 @@ export default defineAdapter({
       if (incident.status === "resolved") continue;
       const lvl = levelForIndicator(incident.impact ?? "");
       const startedAt = incident.started_at ?? incident.created_at;
+      const updatedAt = incident.updated_at;
       const affected = incident.components ?? [];
       if (affected.length === 0) {
-        issues.push({ title: incident.name, level: lvl, startedAt });
+        issues.push({ title: incident.name, level: lvl, startedAt, updatedAt });
       } else {
         for (const component of affected) {
           issues.push({
@@ -86,6 +88,7 @@ export default defineAdapter({
             title: incident.name,
             level: lvl,
             startedAt,
+            updatedAt,
           });
         }
       }

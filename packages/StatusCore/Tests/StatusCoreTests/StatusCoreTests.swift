@@ -275,6 +275,104 @@ final class AggregationTests: XCTestCase {
     }
 }
 
+final class IssueStalenessTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 10_000_000)
+    private let threshold: TimeInterval = 72 * 3600  // 3 days
+
+    private func issue(_ level: StatusLevel, ageHours: Double?) -> SiteIssue {
+        let started = ageHours.map { now.addingTimeInterval(-$0 * 3600) }
+        return SiteIssue(component: nil, title: "t", level: level, startedAt: started)
+    }
+
+    func testMinorGoesStalePastThreshold() {
+        XCTAssertTrue(issue(.minor, ageHours: 24 * 21).isStale(threshold: threshold, now: now))
+    }
+
+    func testFreshMinorIsNotStale() {
+        XCTAssertFalse(issue(.minor, ageHours: 12).isStale(threshold: threshold, now: now))
+    }
+
+    func testMajorIsNeverStale() {
+        // A long-running major outage still matters, however old.
+        XCTAssertFalse(issue(.major, ageHours: 24 * 90).isStale(threshold: threshold, now: now))
+    }
+
+    func testNoTimestampIsNeverStale() {
+        // A degraded-component fallback with no time reported is a present condition.
+        XCTAssertFalse(issue(.minor, ageHours: nil).isStale(threshold: threshold, now: now))
+    }
+
+    func testLastUpdatePreemptsStart() {
+        // Old start, but a recent update means it's still active → not stale.
+        let old = now.addingTimeInterval(-24 * 21 * 3600)
+        let recent = now.addingTimeInterval(-3600)
+        let i = SiteIssue(component: nil, title: "t", level: .minor, startedAt: old, updatedAt: recent)
+        XCTAssertFalse(i.isStale(threshold: threshold, now: now))
+    }
+
+    func testCollapseKeepsLatestUpdate() {
+        let old = Date(timeIntervalSince1970: 100)
+        let newer = Date(timeIntervalSince1970: 900)
+        let issues = [
+            SiteIssue(component: "A", title: "Same", level: .minor, startedAt: old, updatedAt: old),
+            SiteIssue(component: "B", title: "Same", level: .minor, startedAt: old, updatedAt: newer),
+        ]
+        XCTAssertEqual(issues.collapsed().first?.updatedAt, newer)
+    }
+
+    private func siteWith(_ issues: [SiteIssue], level: StatusLevel) -> SiteStatus {
+        SiteStatus(siteID: "x", name: "X", level: level, detail: "", issues: issues, checkedAt: now)
+    }
+
+    func testEffectiveLevelDropsWhenAllIssuesStale() {
+        let site = siteWith([issue(.minor, ageHours: 24 * 21)], level: .minor)
+        XCTAssertEqual(site.effectiveLevel(threshold: threshold, now: now), .operational)
+    }
+
+    func testEffectiveLevelKeepsWorstFreshIssue() {
+        let site = siteWith(
+            [issue(.minor, ageHours: 24 * 21), issue(.major, ageHours: 1)], level: .major)
+        XCTAssertEqual(site.effectiveLevel(threshold: threshold, now: now), .major)
+    }
+
+    func testEffectiveLevelKeepsReportedWhenNoIssues() {
+        // No attributable issue → never mask an error/unknown state.
+        let site = siteWith([], level: .unknown)
+        XCTAssertEqual(site.effectiveLevel(threshold: threshold, now: now), .unknown)
+    }
+
+    func testPartitionSplitsFreshFromStale() {
+        let site = siteWith(
+            [issue(.minor, ageHours: 1), issue(.minor, ageHours: 24 * 21)], level: .minor)
+        let (fresh, stale) = site.partitionedIssues(threshold: threshold, now: now)
+        XCTAssertEqual(fresh.count, 1)
+        XCTAssertEqual(stale.count, 1)
+    }
+
+    func testOverallLevelIgnoresStaleLowImpact() {
+        let staleSite = siteWith([issue(.minor, ageHours: 24 * 21)], level: .minor)
+        let goodSite = siteWith([], level: .operational)
+        XCTAssertEqual([staleSite, goodSite].overallLevel(threshold: threshold, now: now), .operational)
+    }
+}
+
+final class ConfigurationDecodeTests: XCTestCase {
+    func testLegacyConfigWithoutStaleKeysGetsDefaults() throws {
+        let json = #"{"refreshIntervalSeconds":60,"sites":[]}"#
+        let config = try JSONDecoder().decode(AppConfiguration.self, from: Data(json.utf8))
+        XCTAssertTrue(config.demoteStaleIssues)
+        XCTAssertEqual(config.staleIssueThresholdHours, 72)
+    }
+
+    func testRoundTripPreservesStaleSettings() throws {
+        let original = AppConfiguration(
+            sites: [], demoteStaleIssues: false, staleIssueThresholdHours: 12)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppConfiguration.self, from: data)
+        XCTAssertEqual(decoded, original)
+    }
+}
+
 // MARK: - Helpers
 
 func XCTAssertThrowsErrorAsync(

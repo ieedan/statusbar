@@ -68,15 +68,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Rendering
 
     private func render() {
-        let overall = results.overallLevel
+        let overall = results.overallLevel(threshold: staleThreshold, now: Date())
         statusItem.button?.image = StatusIcons.shape(for: overall, filled: false, size: 15)
         statusItem.button?.toolTip = "Site Status — \(StatusIcons.label(for: overall))"
         rebuildMenu()
     }
 
+    /// How long a non-major issue may go quiet before it's demoted, as a
+    /// duration — or "never" (an unreachable threshold) when demotion is off.
+    private var staleThreshold: TimeInterval {
+        config.demoteStaleIssues
+            ? TimeInterval(max(1, config.staleIssueThresholdHours) * 3600)
+            : .greatestFiniteMagnitude
+    }
+
     private func rebuildMenu() {
         let menu = NSMenu()
-        let overall = results.overallLevel
+        // We set every item's enabled state explicitly (informational rows are
+        // disabled, actions carry a target), so turn off auto-enabling — it would
+        // otherwise gray out a low-priority submenu whose children are all disabled.
+        menu.autoenablesItems = false
+        let now = Date()
+        let threshold = staleThreshold
+        let overall = results.overallLevel(threshold: threshold, now: now)
 
         let summary = NSMenuItem(
             title: StatusIcons.label(for: overall), action: nil, keyEquivalent: "")
@@ -93,6 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(loading)
         } else {
             for status in results {
+                // The site row stays honest to what the source reports — a green
+                // dot next to "Minor Service Outage" would contradict itself. The
+                // demotion instead shows up as the issue moving into the submenu,
+                // and in the *menubar* icon settling back to green (see `render`).
                 let fullTitle = "\(status.name) — \(status.detail)"
                 let item = NSMenuItem(
                     title: Self.truncated(fullTitle),
@@ -104,23 +122,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.toolTip = fullTitle
                 menu.addItem(item)
 
+                let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
+
                 // Indented detail line per active issue affecting this site,
                 // capped so a single busy service can't dominate the menu.
-                for issue in status.issues.prefix(Self.maxIssuesPerSite) {
-                    let age = issue.startedAt.map { "  ·  \(relativeAge($0))" } ?? ""
-                    let detail = NSMenuItem(
-                        title: Self.truncated(issue.summary, max: Self.maxIssueLength) + age,
-                        action: nil, keyEquivalent: "")
-                    detail.indentationLevel = 2
-                    detail.isEnabled = false
-                    detail.toolTip =
-                        issue.summary
-                        + (issue.startedAt.map {
-                            "\n\nStarted \(Self.fullTimeFormatter.string(from: $0))"
-                        } ?? "")
-                    menu.addItem(detail)
+                for issue in fresh.prefix(Self.maxIssuesPerSite) {
+                    menu.addItem(Self.issueRow(issue, indent: 2))
                 }
-                let overflow = status.issues.count - Self.maxIssuesPerSite
+                let overflow = fresh.count - Self.maxIssuesPerSite
                 if overflow > 0 {
                     let more = NSMenuItem(
                         title: "+\(overflow) more…", action: #selector(openSite(_:)),
@@ -129,6 +138,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     more.representedObject = status.pageURL
                     more.indentationLevel = 2
                     menu.addItem(more)
+                }
+
+                // Lingering low-impact issues that have gone quiet are tucked into
+                // a submenu so they stay reachable without cluttering the site.
+                if !stale.isEmpty {
+                    let label = stale.count == 1
+                        ? "1 low-priority issue…" : "\(stale.count) low-priority issues…"
+                    let staleItem = NSMenuItem(title: label, action: nil, keyEquivalent: "")
+                    staleItem.indentationLevel = 2
+                    let submenu = NSMenu()
+                    submenu.autoenablesItems = false
+                    for issue in stale {
+                        submenu.addItem(Self.issueRow(issue, indent: 0))
+                    }
+                    staleItem.submenu = submenu
+                    menu.addItem(staleItem)
                 }
             }
         }
@@ -248,6 +273,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Most issue rows to show under one service before collapsing to "+N more".
     private static let maxIssuesPerSite = 5
+
+    /// Builds one indented, informational issue row: truncated summary with a
+    /// relative age, and a tooltip carrying the full text plus start / last-update
+    /// times when the source reports them.
+    private static func issueRow(_ issue: SiteIssue, indent: Int) -> NSMenuItem {
+        let age = issue.startedAt.map { "  ·  \(relativeAge($0))" } ?? ""
+        let row = NSMenuItem(
+            title: truncated(issue.summary, max: maxIssueLength) + age,
+            action: nil, keyEquivalent: "")
+        row.indentationLevel = indent
+        row.isEnabled = false
+        var tip = issue.summary
+        if let started = issue.startedAt {
+            tip += "\n\nStarted \(fullTimeFormatter.string(from: started))"
+        }
+        if let updated = issue.updatedAt {
+            tip += "\nLast updated \(fullTimeFormatter.string(from: updated))"
+        }
+        row.toolTip = tip
+        return row
+    }
 
     private static func truncated(_ text: String, max: Int = maxRowLength) -> String {
         guard text.count > max else { return text }

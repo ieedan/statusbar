@@ -6,10 +6,39 @@ public struct AppConfiguration: Codable, Sendable, Equatable {
     public var refreshIntervalSeconds: Int
     /// The sites to monitor.
     public var sites: [SiteConfig]
+    /// When true, lingering low-impact issues that have gone quiet for longer
+    /// than `staleIssueThresholdHours` are demoted into a per-site "low-priority"
+    /// submenu and stop driving the menubar icon.
+    public var demoteStaleIssues: Bool
+    /// How long a non-major issue may go without a source update before it's
+    /// considered stale. Major incidents are never demoted regardless.
+    public var staleIssueThresholdHours: Int
 
-    public init(refreshIntervalSeconds: Int = 60, sites: [SiteConfig]) {
+    public init(
+        refreshIntervalSeconds: Int = 60,
+        sites: [SiteConfig],
+        demoteStaleIssues: Bool = true,
+        staleIssueThresholdHours: Int = 72
+    ) {
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.sites = sites
+        self.demoteStaleIssues = demoteStaleIssues
+        self.staleIssueThresholdHours = staleIssueThresholdHours
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case refreshIntervalSeconds, sites, demoteStaleIssues, staleIssueThresholdHours
+    }
+
+    /// Decodes leniently so configs written before these settings existed still
+    /// load, falling back to the defaults for any missing key.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        refreshIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 60
+        sites = try c.decodeIfPresent([SiteConfig].self, forKey: .sites) ?? []
+        demoteStaleIssues = try c.decodeIfPresent(Bool.self, forKey: .demoteStaleIssues) ?? true
+        staleIssueThresholdHours =
+            try c.decodeIfPresent(Int.self, forKey: .staleIssueThresholdHours) ?? 72
     }
 }
 

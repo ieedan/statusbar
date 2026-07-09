@@ -26,6 +26,13 @@ export interface AdapterIssue {
    * The app shows this as a relative age ("2h ago"). Optional.
    */
   startedAt?: string;
+  /**
+   * When the issue was last updated by the source, as an ISO 8601 string.
+   * The app uses this to spot lingering low-impact issues that have gone quiet
+   * for a long time and demote them out of the way. Falls back to `startedAt`
+   * when omitted. Optional.
+   */
+  updatedAt?: string;
 }
 
 /** What `parse` returns. */

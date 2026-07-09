@@ -148,6 +148,7 @@ public actor JSAdapter {
             let title: String
             let level: String?
             let startedAt: String?
+            let updatedAt: String?
         }
 
         func normalized() -> ParsedStatus {
@@ -157,7 +158,8 @@ public actor JSAdapter {
                     component: issue.component,
                     title: issue.title,
                     level: issue.level.flatMap(StatusLevel.init(rawValue:)) ?? overall,
-                    startedAt: issue.startedAt.flatMap(Self.parseDate)
+                    startedAt: issue.startedAt.flatMap(Self.parseDate),
+                    updatedAt: issue.updatedAt.flatMap(Self.parseDate)
                 )
             }
             return ParsedStatus(level: overall, detail: detail, issues: mapped)

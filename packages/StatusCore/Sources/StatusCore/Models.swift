@@ -90,12 +90,19 @@ public struct SiteIssue: Sendable, Equatable, Identifiable {
     public let level: StatusLevel
     /// When the issue began, if the source reports it.
     public let startedAt: Date?
+    /// When the source last updated this issue, if reported. Distinguishes an
+    /// actively-worked incident from one that has gone quiet.
+    public let updatedAt: Date?
 
-    public init(component: String?, title: String, level: StatusLevel, startedAt: Date? = nil) {
+    public init(
+        component: String?, title: String, level: StatusLevel,
+        startedAt: Date? = nil, updatedAt: Date? = nil
+    ) {
         self.component = component
         self.title = title
         self.level = level
         self.startedAt = startedAt
+        self.updatedAt = updatedAt
     }
 
     /// One-line rendering, e.g. `"Actions — Delays starting Actions runs"`.
@@ -104,6 +111,23 @@ public struct SiteIssue: Sendable, Equatable, Identifiable {
             return "\(component) — \(title)"
         }
         return title
+    }
+
+    /// The most recent time we have evidence this issue was active: the last
+    /// source update if available, otherwise its start. `nil` when the source
+    /// reports neither (e.g. a degraded-component fallback), which we treat as a
+    /// present condition — never stale.
+    public var lastActivity: Date? { updatedAt ?? startedAt }
+
+    /// Whether this issue is stale: low-impact *and* quiet for longer than
+    /// `threshold`. A long-running lingering `minor` incident that hasn't been
+    /// touched in days is exactly this. Major outages are never stale — a long
+    /// major incident still matters — and issues with no timestamp are never
+    /// stale, since we can't judge their age.
+    public func isStale(threshold: TimeInterval, now: Date) -> Bool {
+        guard level != .major else { return false }
+        guard let last = lastActivity else { return false }
+        return now.timeIntervalSince(last) > threshold
     }
 }
 
@@ -148,6 +172,14 @@ public extension Array where Element == SiteStatus {
     var overallLevel: StatusLevel {
         self.map(\.level).max(by: { $0.severity < $1.severity }) ?? .unknown
     }
+
+    /// The worst *effective* level across all results — like `overallLevel`, but
+    /// stale low-impact issues no longer count, so the menubar icon can settle
+    /// back to green while a lingering minor incident is merely demoted, not gone.
+    func overallLevel(threshold: TimeInterval, now: Date) -> StatusLevel {
+        self.map { $0.effectiveLevel(threshold: threshold, now: now) }
+            .max(by: { $0.severity < $1.severity }) ?? .unknown
+    }
 }
 
 public extension Array where Element == SiteIssue {
@@ -168,7 +200,42 @@ public extension Array where Element == SiteIssue {
             let worst = group.max { $0.level.severity < $1.level.severity }?.level ?? .unknown
             let component = group.count == 1 ? group[0].component : nil
             let earliest = group.compactMap(\.startedAt).min()
-            return SiteIssue(component: component, title: title, level: worst, startedAt: earliest)
+            let latestUpdate = group.compactMap(\.updatedAt).max()
+            return SiteIssue(
+                component: component, title: title, level: worst,
+                startedAt: earliest, updatedAt: latestUpdate)
         }
+    }
+}
+
+public extension SiteStatus {
+    /// Splits this site's issues into the ones worth surfacing now (`fresh`) and
+    /// the lingering low-impact ones that have gone quiet (`stale`). Order within
+    /// each group is preserved.
+    func partitionedIssues(threshold: TimeInterval, now: Date) -> (fresh: [SiteIssue], stale: [SiteIssue]) {
+        var fresh: [SiteIssue] = []
+        var stale: [SiteIssue] = []
+        for issue in issues {
+            if issue.isStale(threshold: threshold, now: now) {
+                stale.append(issue)
+            } else {
+                fresh.append(issue)
+            }
+        }
+        return (fresh, stale)
+    }
+
+    /// The level this site should display once stale low-impact issues are set
+    /// aside. When every issue is stale, the site reads operational — so a
+    /// three-week-old minor incident no longer keeps the row (and the menubar
+    /// icon) lit. A site with no attributable issues keeps its reported level,
+    /// so error/unknown states are never masked.
+    func effectiveLevel(threshold: TimeInterval, now: Date) -> StatusLevel {
+        guard !issues.isEmpty else { return level }
+        let fresh = issues.filter { !$0.isStale(threshold: threshold, now: now) }
+        guard let worst = fresh.map(\.level).max(by: { $0.severity < $1.severity }) else {
+            return .operational
+        }
+        return worst
     }
 }
