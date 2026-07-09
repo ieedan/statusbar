@@ -36,6 +36,22 @@ if CommandLine.arguments.contains("--check") {
     exit(0)
 }
 
+// Launch-at-login control from the command line (used for install/verify).
+if CommandLine.arguments.contains("--login-status") {
+    print("Launch at login: \(LoginItem.statusDescription)")
+    exit(0)
+}
+if CommandLine.arguments.contains("--login-enable") {
+    do { _ = try LoginItem.setEnabled(true) } catch { print("Failed: \(error)"); exit(1) }
+    print("Launch at login: \(LoginItem.statusDescription)")
+    exit(0)
+}
+if CommandLine.arguments.contains("--login-disable") {
+    do { _ = try LoginItem.setEnabled(false) } catch { print("Failed: \(error)"); exit(1) }
+    print("Launch at login: \(LoginItem.statusDescription)")
+    exit(0)
+}
+
 // Menubar-only agent: no dock icon, no main window.
 let app = NSApplication.shared
 let delegate = AppDelegate()

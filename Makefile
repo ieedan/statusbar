@@ -17,5 +17,11 @@ test:
 app:
 	./scripts/build-app.sh
 
+# Build and install the app into /Applications.
+install: app
+	rm -rf "/Applications/Site Status.app"
+	cp -R "dist/Site Status.app" "/Applications/Site Status.app"
+	@echo "Installed to /Applications. Enable 'Launch at login' from Settings (⌘,)."
+
 clean:
 	rm -rf packages/StatusCore/.build apps/StatusBar/.build dist

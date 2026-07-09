@@ -64,12 +64,13 @@ Overall: 🔴 major
 ## Install
 
 ```sh
-make app
-open "dist/Site Status.app"
+make install          # builds and copies Site Status.app to /Applications
+open "/Applications/Site Status.app"
 ```
 
-To keep it running, drag `Site Status.app` into `/Applications` and add it to
-**System Settings → General → Login Items**.
+To start it automatically on login, open **Settings… (⌘,)** and tick
+**Launch at login** (bottom-right). This uses `SMAppService`, so it shows up
+under **System Settings → General → Login Items** and can be turned off there too.
 
 ## Configuration
 

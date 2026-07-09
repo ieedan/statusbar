@@ -28,6 +28,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     private var sites: [SiteConfig] = []
     private var refreshIntervalSeconds = 60
     private var tableView: ServiceTableView!
+    private var loginCheckbox: NSButton!
 
     private let dragType = NSPasteboard.PasteboardType("dev.statusbar.service.row")
 
@@ -55,6 +56,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         sites = config.sites
         refreshIntervalSeconds = config.refreshIntervalSeconds
         tableView?.reloadData()
+        loginCheckbox?.state = LoginItem.isEnabled ? .on : .off
     }
 
     // MARK: - UI
@@ -112,7 +114,16 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
 
-        let bar = NSStackView(views: [addButton, removeButton, hint])
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        spacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+
+        let loginCheck = NSButton(checkboxWithTitle: "Launch at login",
+                                  target: self, action: #selector(toggleLoginItem(_:)))
+        loginCheck.state = LoginItem.isEnabled ? .on : .off
+        self.loginCheckbox = loginCheck
+
+        let bar = NSStackView(views: [addButton, removeButton, hint, spacer, loginCheck])
         bar.orientation = .horizontal
         bar.spacing = 6
         bar.translatesAutoresizingMaskIntoConstraints = false
@@ -345,6 +356,22 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             n += 1
         }
         return candidate
+    }
+
+    // MARK: - Launch at login
+
+    @objc private func toggleLoginItem(_ sender: NSButton) {
+        do {
+            let enabled = try LoginItem.setEnabled(sender.state == .on)
+            sender.state = enabled ? .on : .off
+        } catch {
+            sender.state = LoginItem.isEnabled ? .on : .off
+            let alert = NSAlert()
+            alert.messageText = "Couldn't change launch-at-login"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
     }
 
     // MARK: - Persistence
