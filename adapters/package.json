@@ -4,7 +4,7 @@
   "description": "Built-in Site Status adapters and the adapter SDK.",
   "scripts": {
     "build": "node build.mjs",
-    "typecheck": "tsc -p statuspage --noEmit && tsc -p aws --noEmit"
+    "typecheck": "tsc -p statuspage --noEmit && tsc -p aws --noEmit && tsc -p gcp --noEmit"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

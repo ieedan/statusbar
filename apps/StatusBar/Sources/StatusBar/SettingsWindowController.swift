@@ -14,12 +14,13 @@ final class ServiceTableView: NSTableView {
     }
 }
 
-/// Settings window: add, remove, reorder, and enable/disable monitored services.
+/// Settings window: enable/disable and reorder monitored services.
 ///
-/// Reordering (drag rows) and removal (right-click, or the − button) live here
-/// because the menubar dropdown itself is an `NSMenu`, which can't host drags or
-/// contextual menus. Every edit is persisted immediately and `onChange` fires so
-/// the menubar refreshes.
+/// The list shows every known service (configured sites + all adapter
+/// suggestions); the per-row checkbox is the only add/remove control, so there
+/// are no +/- buttons. Reordering (drag rows) lives here because the menubar
+/// dropdown itself is an `NSMenu`, which can't host drags. Every edit is
+/// persisted immediately and `onChange` fires so the menubar refreshes.
 @MainActor
 final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let store: ConfigurationStore
@@ -57,13 +58,35 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Adopt a registry rebuilt elsewhere (e.g. after a menu-bar "Reload Config
+    /// & Refresh"), so newly-suggested services appear in the list.
+    func updateRegistry(_ registry: AdapterRegistry) {
+        self.registry = registry
+        reload()
+    }
+
     /// Reload from disk (call before showing, in case the file changed).
     func reload() {
         let config = store.loadOrCreateDefault()
-        sites = config.sites
+        sites = Self.merged(configured: config.sites, suggestions: registry.suggestedSites)
         refreshIntervalSeconds = config.refreshIntervalSeconds
         tableView?.reloadData()
         loginCheckbox?.state = LoginItem.isEnabled ? .on : .off
+    }
+
+    /// The list shows every known service. The user's configured sites come
+    /// first (preserving their order and enabled state); any adapter-suggested
+    /// site not yet configured is appended, disabled, so the user opts in with
+    /// the checkbox. This is why there are no add/remove buttons.
+    private static func merged(configured: [SiteConfig], suggestions: [SiteConfig]) -> [SiteConfig] {
+        var result = configured
+        let taken = Set(configured.map(\.id))
+        for suggestion in suggestions where !taken.contains(suggestion.id) {
+            var entry = suggestion
+            entry.enabled = false
+            result.append(entry)
+        }
+        return result
     }
 
     // MARK: - UI
@@ -104,24 +127,14 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         scroll.translatesAutoresizingMaskIntoConstraints = false
         self.tableView = table
 
-        // Bottom bar: +/- and a hint.
-        let addButton = NSButton(title: "+", target: self, action: #selector(showAddMenu(_:)))
-        addButton.bezelStyle = .smallSquare
-        addButton.setButtonType(.momentaryPushIn)
-        addButton.translatesAutoresizingMaskIntoConstraints = false
-        addButton.widthAnchor.constraint(equalToConstant: 30).isActive = true
-
-        let removeButton = NSButton(title: "−", target: self, action: #selector(removeSelected))
-        removeButton.bezelStyle = .smallSquare
-        removeButton.setButtonType(.momentaryPushIn)
-        removeButton.translatesAutoresizingMaskIntoConstraints = false
-        removeButton.widthAnchor.constraint(equalToConstant: 30).isActive = true
-
+        // Bottom bar: a hint plus the Adapters and Launch-at-login controls.
+        // Services are added/removed purely via each row's checkbox — every known
+        // service is always listed, so there are no +/- buttons.
         let adaptersButton = NSButton(title: "Adapters…", target: self, action: #selector(showAdaptersMenu(_:)))
         adaptersButton.bezelStyle = .rounded
         adaptersButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let hint = NSTextField(labelWithString: "Drag to reorder · right-click a row for options")
+        let hint = NSTextField(labelWithString: "Check a service to show it · drag to reorder")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
 
@@ -134,7 +147,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         loginCheck.state = LoginItem.isEnabled ? .on : .off
         self.loginCheckbox = loginCheck
 
-        let bar = NSStackView(views: [addButton, removeButton, hint, spacer, adaptersButton, loginCheck])
+        let bar = NSStackView(views: [hint, spacer, adaptersButton, loginCheck])
         bar.orientation = .horizontal
         bar.spacing = 6
         bar.translatesAutoresizingMaskIntoConstraints = false
@@ -225,23 +238,6 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         persist()
     }
 
-    @objc private func removeSelected() {
-        let rows = tableView.selectedRowIndexes
-        guard !rows.isEmpty else { NSSound.beep(); return }
-        for index in rows.sorted(by: >) where sites.indices.contains(index) {
-            sites.remove(at: index)
-        }
-        tableView.reloadData()
-        persist()
-    }
-
-    private func remove(row: Int) {
-        guard sites.indices.contains(row) else { return }
-        sites.remove(at: row)
-        tableView.reloadData()
-        persist()
-    }
-
     private func contextMenu(for row: Int) -> NSMenu? {
         guard sites.indices.contains(row) else { return nil }
         let site = sites[row]
@@ -259,13 +255,6 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         open.representedObject = row
         menu.addItem(open)
 
-        menu.addItem(.separator())
-
-        let remove = NSMenuItem(title: "Remove", action: #selector(contextRemove(_:)), keyEquivalent: "")
-        remove.target = self
-        remove.representedObject = row
-        menu.addItem(remove)
-
         return menu
     }
 
@@ -279,104 +268,6 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     @objc private func contextOpen(_ sender: NSMenuItem) {
         guard let row = sender.representedObject as? Int, sites.indices.contains(row) else { return }
         NSWorkspace.shared.open(sites[row].url)
-    }
-
-    @objc private func contextRemove(_ sender: NSMenuItem) {
-        guard let row = sender.representedObject as? Int else { return }
-        remove(row: row)
-    }
-
-    // MARK: - Adding services
-
-    @objc private func showAddMenu(_ sender: NSButton) {
-        let menu = NSMenu()
-        let taken = Set(sites.map(\.id))
-        for entry in registry.suggestedSites where !taken.contains(entry.id) {
-            let item = NSMenuItem(title: entry.name, action: #selector(addCatalogService(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = entry
-            menu.addItem(item)
-        }
-        if menu.items.isEmpty {
-            let none = NSMenuItem(title: "All known services added", action: nil, keyEquivalent: "")
-            none.isEnabled = false
-            menu.addItem(none)
-        }
-        menu.addItem(.separator())
-        let custom = NSMenuItem(title: "Add Custom…", action: #selector(addCustomService), keyEquivalent: "")
-        custom.target = self
-        menu.addItem(custom)
-
-        let location = NSPoint(x: 0, y: sender.bounds.height + 4)
-        menu.popUp(positioning: nil, at: location, in: sender)
-    }
-
-    @objc private func addCatalogService(_ sender: NSMenuItem) {
-        guard let entry = sender.representedObject as? SiteConfig else { return }
-        sites.append(entry)
-        tableView.reloadData()
-        persist()
-    }
-
-    @objc private func addCustomService() {
-        let alert = NSAlert()
-        alert.messageText = "Add a Service"
-        alert.informativeText = "Enter a name, its base URL, and the adapter that reads it."
-        alert.addButton(withTitle: "Add")
-        alert.addButton(withTitle: "Cancel")
-
-        let nameField = NSTextField(frame: NSRect(x: 0, y: 62, width: 320, height: 24))
-        nameField.placeholderString = "Name"
-        let urlField = NSTextField(frame: NSRect(x: 0, y: 32, width: 320, height: 24))
-        urlField.placeholderString = "https://status.example.com"
-
-        let adapterPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26))
-        let ids = registry.adapterIDs
-        adapterPopup.addItems(withTitles: ids)
-        if let statuspageIndex = ids.firstIndex(of: "statuspage") {
-            adapterPopup.selectItem(at: statuspageIndex)
-        }
-
-        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 90))
-        accessory.addSubview(nameField)
-        accessory.addSubview(urlField)
-        accessory.addSubview(adapterPopup)
-        alert.accessoryView = accessory
-        alert.window.initialFirstResponder = nameField
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-
-        let name = nameField.stringValue.trimmingCharacters(in: .whitespaces)
-        let urlString = urlField.stringValue.trimmingCharacters(in: .whitespaces)
-        let adapterID = adapterPopup.titleOfSelectedItem ?? "statuspage"
-        guard !name.isEmpty, let url = URL(string: urlString), url.scheme?.hasPrefix("http") == true else {
-            let err = NSAlert()
-            err.messageText = "Invalid service"
-            err.informativeText = "A name and a valid http(s) URL are required."
-            err.runModal()
-            return
-        }
-
-        let id = Self.slug(name, existing: sites.map(\.id))
-        sites.append(SiteConfig(id: id, name: name, adapterID: adapterID, url: url))
-        tableView.reloadData()
-        persist()
-    }
-
-    /// A stable, unique id derived from a display name.
-    private static func slug(_ name: String, existing: [String]) -> String {
-        let base = name.lowercased()
-            .map { $0.isLetter || $0.isNumber ? $0 : "-" }
-            .reduce(into: "") { $0.append($1) }
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        var candidate = base.isEmpty ? "service" : base
-        var n = 2
-        let taken = Set(existing)
-        while taken.contains(candidate) {
-            candidate = "\(base)-\(n)"
-            n += 1
-        }
-        return candidate
     }
 
     // MARK: - Launch at login
@@ -472,18 +363,19 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
         try fm.copyItem(at: source, to: target)
 
-        // Rebuild the registry app-wide and reflect new suggested sites here.
+        // Rebuild the registry app-wide, then re-merge so any newly-suggested
+        // sites appear as (unchecked) rows in the list right away.
         let before = Set(registry.adapterIDs)
         registry = reloadAdapters()
         let added = registry.adapterIDs.filter { !before.contains($0) }
-        tableView.reloadData()
+        reload()
 
         let alert = NSAlert()
         alert.messageText = "Adapter installed"
         if added.isEmpty {
             alert.informativeText = "Copied \"\(source.lastPathComponent)\". No new adapter id appeared — it may replace an existing one or failed to load."
         } else {
-            alert.informativeText = "Added: \(added.joined(separator: ", ")). Any suggested sites are now in the + menu."
+            alert.informativeText = "Added: \(added.joined(separator: ", ")). Its suggested sites are now in the list — check one to show it."
         }
         alert.runModal()
     }

@@ -1,0 +1,6 @@
+{
+  "id": "gcp",
+  "name": "Google Cloud",
+  "description": "Google Cloud Platform status feed (incidents.json, not a Statuspage).",
+  "entry": "dist/index.js"
+}

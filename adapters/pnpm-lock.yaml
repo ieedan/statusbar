@@ -21,6 +21,12 @@ importers:
         specifier: workspace:*
         version: link:../sdk
 
+  gcp:
+    dependencies:
+      '@status-bar/adapter-sdk':
+        specifier: workspace:*
+        version: link:../sdk
+
   sdk: {}
 
   statuspage:

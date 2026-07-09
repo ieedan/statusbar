@@ -1,0 +1,9 @@
+{
+  "name": "@status-bar/adapter-gcp",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@status-bar/adapter-sdk": "workspace:*"
+  }
+}

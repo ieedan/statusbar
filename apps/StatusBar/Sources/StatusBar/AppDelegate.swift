@@ -206,6 +206,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadConfig() {
         guard let configStore else { return }
+        // Rescan the adapters directory too, so adapters dropped into the folder
+        // (via "Reveal Adapters Folder") are picked up without relaunching. Keep
+        // an open Settings window in sync so its + menu reflects the new catalog.
+        let registry = AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
+        self.registry = registry
+        self.monitor = StatusMonitor(registry: registry)
+        settingsController?.updateRegistry(registry)
         do {
             config = try configStore.load()
             scheduleTimer()
