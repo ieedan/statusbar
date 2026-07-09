@@ -4,10 +4,11 @@ import StatusCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private let monitor = StatusMonitor()
-    private let configStore = ConfigurationStore()
+    private var registry: AdapterRegistry?
+    private var monitor: StatusMonitor?
+    private var configStore: ConfigurationStore?
 
-    private var config = AppConfiguration.default
+    private var config = AppConfiguration(sites: [])
     private var results: [SiteStatus] = []
     private var lastChecked: Date?
     private var isRefreshing = false
@@ -15,16 +16,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        config = configStore.loadOrCreateDefault()
-
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = StatusIcons.shape(for: .unknown, filled: false, size: 15)
         statusItem.button?.toolTip = "Site Status"
         statusItem.menu = NSMenu()
-
         rebuildMenu()
-        scheduleTimer()
-        refresh()
+
+        // Load adapters off the main thread (evaluates JS), then start monitoring.
+        Task { @MainActor in
+            let registry = await Task.detached {
+                AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
+            }.value
+            let store = ConfigurationStore(defaultConfig: AppConfiguration(sites: registry.suggestedSites))
+
+            self.registry = registry
+            self.configStore = store
+            self.config = store.loadOrCreateDefault()
+            self.monitor = StatusMonitor(registry: registry)
+
+            self.scheduleTimer()
+            self.refresh()
+        }
     }
 
     // MARK: - Refresh
@@ -38,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refresh() {
-        guard !isRefreshing else { return }
+        guard let monitor, !isRefreshing else { return }
         isRefreshing = true
         rebuildMenu()
         let snapshot = config
@@ -92,10 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Indented detail line per active issue affecting this site,
                 // capped so a single busy service can't dominate the menu.
                 for issue in status.issues.prefix(Self.maxIssuesPerSite) {
-                    let detail = NSMenuItem(title: Self.truncated(issue.summary), action: nil, keyEquivalent: "")
+                    let age = issue.startedAt.map { "  ·  \(relativeAge($0))" } ?? ""
+                    let detail = NSMenuItem(title: Self.truncated(issue.summary, max: Self.maxIssueLength) + age, action: nil, keyEquivalent: "")
                     detail.indentationLevel = 2
                     detail.isEnabled = false
-                    detail.toolTip = issue.summary
+                    detail.toolTip = issue.summary + (issue.startedAt.map {
+                        "\n\nStarted \(Self.fullTimeFormatter.string(from: $0))"
+                    } ?? "")
                     menu.addItem(detail)
                 }
                 let overflow = status.issues.count - Self.maxIssuesPerSite
@@ -150,10 +165,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func refreshNow() { refresh() }
 
     @objc private func openSettings() {
+        guard let configStore, let registry else { NSSound.beep(); return }
         if settingsController == nil {
-            settingsController = SettingsWindowController(store: configStore) { [weak self] in
-                self?.applyConfigChange()
-            }
+            settingsController = SettingsWindowController(
+                store: configStore,
+                registry: registry,
+                onChange: { [weak self] in self?.applyConfigChange() },
+                reloadAdapters: { [weak self] in self?.reloadAdapters() ?? registry })
         }
         settingsController?.reload()
         NSApp.activate(ignoringOtherApps: true)
@@ -163,17 +181,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Called after Settings edits the config: reload it and re-check.
     private func applyConfigChange() {
+        guard let configStore else { return }
         config = configStore.loadOrCreateDefault()
         scheduleTimer()
         refresh()
     }
 
+    /// Called after Settings installs/removes an adapter: rebuild the registry
+    /// (picking up newly-installed plugins) and re-check. Returns the new
+    /// registry so Settings can refresh its suggested-site catalog.
+    private func reloadAdapters() -> AdapterRegistry {
+        let registry = AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
+        self.registry = registry
+        self.monitor = StatusMonitor(registry: registry)
+        refresh()
+        return registry
+    }
+
     @objc private func revealConfig() {
-        config = configStore.loadOrCreateDefault()
+        guard let configStore else { return }
+        _ = configStore.loadOrCreateDefault()
         NSWorkspace.shared.activateFileViewerSelecting([configStore.fileURL])
     }
 
     @objc private func reloadConfig() {
+        guard let configStore else { return }
         do {
             config = try configStore.load()
             scheduleTimer()
@@ -192,14 +224,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Longest a menu row's text may be before it's clipped with an ellipsis.
     /// Keeps the menu from stretching to fit a wordy incident; the full text
     /// stays available in the row's tooltip.
-    private static let maxRowLength = 56
+    private static let maxRowLength = 44
+    /// Issue detail rows clip tighter than site rows — they carry the widest
+    /// text, and the full description stays in the tooltip.
+    private static let maxIssueLength = 38
 
     /// Most issue rows to show under one service before collapsing to "+N more".
     private static let maxIssuesPerSite = 5
 
-    private static func truncated(_ text: String) -> String {
-        guard text.count > maxRowLength else { return text }
-        let end = text.index(text.startIndex, offsetBy: maxRowLength)
+    private static func truncated(_ text: String, max: Int = maxRowLength) -> String {
+        guard text.count > max else { return text }
+        let end = text.index(text.startIndex, offsetBy: max)
         return text[..<end].trimmingCharacters(in: .whitespaces) + "…"
     }
 
@@ -207,6 +242,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let f = DateFormatter()
         f.timeStyle = .medium
         f.dateStyle = .none
+        return f
+    }()
+
+    private static let fullTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .medium
         return f
     }()
 }

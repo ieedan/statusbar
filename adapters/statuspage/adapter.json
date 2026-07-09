@@ -1,0 +1,6 @@
+{
+  "id": "statuspage",
+  "name": "Statuspage",
+  "description": "Atlassian Statuspage sites (reads /api/v2/summary.json).",
+  "entry": "dist/index.js"
+}

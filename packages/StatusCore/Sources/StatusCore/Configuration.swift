@@ -11,19 +11,18 @@ public struct AppConfiguration: Codable, Sendable, Equatable {
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.sites = sites
     }
-
-    /// The default set of widely-used sites shipped out of the box.
-    public static var `default`: AppConfiguration {
-        AppConfiguration(refreshIntervalSeconds: 60, sites: ServiceCatalog.all)
-    }
 }
 
 /// Loads and saves `AppConfiguration` to disk, seeding defaults on first run.
 public struct ConfigurationStore: Sendable {
     public let fileURL: URL
+    /// Written to disk on first run (or when the file is unreadable). Callers
+    /// build this from the loaded adapters' suggested sites.
+    private let defaultConfig: AppConfiguration
 
     /// Default location: `~/Library/Application Support/StatusBar/config.json`.
-    public init(fileURL: URL? = nil) {
+    public init(defaultConfig: AppConfiguration, fileURL: URL? = nil) {
+        self.defaultConfig = defaultConfig
         if let fileURL {
             self.fileURL = fileURL
         } else {
@@ -47,9 +46,8 @@ public struct ConfigurationStore: Sendable {
            let config = try? JSONDecoder().decode(AppConfiguration.self, from: data) {
             return config
         }
-        let fallback = AppConfiguration.default
-        try? save(fallback)
-        return fallback
+        try? save(defaultConfig)
+        return defaultConfig
     }
 
     /// Loads config, throwing on a malformed file (used when the user hits "Reload").

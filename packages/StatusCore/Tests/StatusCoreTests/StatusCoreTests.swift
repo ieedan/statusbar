@@ -13,116 +13,175 @@ struct StubFetcher: HTTPFetching {
     }
 }
 
-final class StatuspageProviderTests: XCTestCase {
-    func testIndicatorMapping() {
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "none"), .operational)
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "minor"), .minor)
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "maintenance"), .minor)
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "major"), .major)
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "critical"), .major)
-        XCTAssertEqual(StatuspageProvider.level(forIndicator: "banana"), .unknown)
+/// A minimal inline adapter used across tests (no SDK/build step needed).
+private let testAdapterScript = """
+globalThis.__STATUSBAR_ADAPTER__ = {
+  id: 'test',
+  name: 'Test Adapter',
+  endpoint: function (base) { return base.replace(/\\/$/, '') + '/status.json'; },
+  parse: function (body, ctx) {
+    var d = JSON.parse(body);
+    return { level: d.level, detail: d.detail, issues: d.issues || [] };
+  },
+  suggestedSites: [{ id: 'example', name: 'Example', url: 'https://example.com' }]
+};
+"""
+
+// MARK: - JSAdapter runtime
+
+final class JSAdapterTests: XCTestCase {
+    func testMetadataAndSuggestedSites() throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        XCTAssertEqual(adapter.id, "test")
+        XCTAssertEqual(adapter.name, "Test Adapter")
+        XCTAssertEqual(adapter.suggestedSites.count, 1)
+        XCTAssertEqual(adapter.suggestedSites.first?.adapterID, "test")
+        XCTAssertEqual(adapter.suggestedSites.first?.url.absoluteString, "https://example.com")
     }
 
-    func testHumanizeComponentStatus() {
-        XCTAssertEqual(StatuspageProvider.humanize("partial_outage"), "Partial Outage")
-        XCTAssertEqual(StatuspageProvider.humanize("degraded_performance"), "Degraded Performance")
+    func testEndpoint() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        let endpoint = try await adapter.endpoint(baseURL: "https://x.com/")
+        XCTAssertEqual(endpoint, "https://x.com/status.json")
     }
 
-    func testFetchParsesResponseAndIncidents() async throws {
-        let body = """
-        {"status":{"indicator":"minor","description":"Minor Service Outage"},
-         "incidents":[{"name":"Delays starting Actions runs","impact":"major",
-                       "status":"investigating","components":[{"name":"Actions","status":"partial_outage"}]}]}
+    func testParseMapsLevelAndIssues() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        let body = #"{"level":"minor","detail":"Degraded","issues":[{"component":"API","title":"Slow"}]}"#
+        let parsed = try await adapter.parse(body: body, baseURL: "https://x.com")
+        XCTAssertEqual(parsed.level, .minor)
+        XCTAssertEqual(parsed.detail, "Degraded")
+        XCTAssertEqual(parsed.issues.count, 1)
+        XCTAssertEqual(parsed.issues.first?.summary, "API — Slow")
+        XCTAssertEqual(parsed.issues.first?.level, .minor) // inherits overall
+    }
+
+    func testInvalidLevelBecomesUnknown() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        let parsed = try await adapter.parse(body: #"{"level":"banana","detail":"?"}"#, baseURL: "x")
+        XCTAssertEqual(parsed.level, .unknown)
+    }
+
+    func testScriptWithoutAdapterThrows() {
+        XCTAssertThrowsError(try JSAdapter(script: "var x = 1;"))
+    }
+
+    func testPlainJSViaHostDefineAdapter() throws {
+        // No SDK import, no build — relies on the injected host `defineAdapter`.
+        let script = """
+        defineAdapter({
+          id: 'plain', name: 'Plain JS',
+          endpoint: function (b) { return b; },
+          parse: function (body) { return { level: 'operational', detail: 'ok' }; }
+        });
         """
-        let fetcher = StubFetcher(routes: [("githubstatus", Data(body.utf8), 200)])
-        let provider = StatuspageProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "github", name: "GitHub", kind: .statuspage,
-                              url: URL(string: "https://www.githubstatus.com")!)
-
-        let status = try await provider.fetchStatus(for: site)
-        XCTAssertEqual(status.level, .minor)
-        XCTAssertEqual(status.detail, "Minor Service Outage")
-        XCTAssertEqual(status.issues.count, 1)
-        XCTAssertEqual(status.issues.first?.summary, "Actions — Delays starting Actions runs")
-        XCTAssertEqual(status.issues.first?.level, .major)
+        let adapter = try JSAdapter(script: script)
+        XCTAssertEqual(adapter.id, "plain")
+        XCTAssertEqual(adapter.name, "Plain JS")
     }
 
-    func testResolvedIncidentsAreIgnored() async throws {
-        let body = """
-        {"status":{"indicator":"none","description":"All Systems Operational"},
-         "incidents":[{"name":"Old thing","impact":"major","status":"resolved","components":[]}]}
-        """
-        let fetcher = StubFetcher(routes: [("statuspage", Data(body.utf8), 200)])
-        let provider = StatuspageProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "x", name: "X", kind: .statuspage,
-                              url: URL(string: "https://x.statuspage.io")!)
-        let status = try await provider.fetchStatus(for: site)
-        XCTAssertTrue(status.issues.isEmpty)
-    }
-
-    func testDegradedComponentsFallbackWhenNoIncidents() async throws {
-        let body = """
-        {"status":{"indicator":"minor","description":"Partial Degradation"},
-         "incidents":[],
-         "components":[{"name":"API","status":"partial_outage"},
-                       {"name":"Web","status":"operational"}]}
-        """
-        let fetcher = StubFetcher(routes: [("statuspage", Data(body.utf8), 200)])
-        let provider = StatuspageProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "x", name: "X", kind: .statuspage,
-                              url: URL(string: "https://x.statuspage.io")!)
-        let status = try await provider.fetchStatus(for: site)
-        XCTAssertEqual(status.issues.count, 1)
-        XCTAssertEqual(status.issues.first?.summary, "API — Partial Outage")
-    }
-
-    func testNon2xxThrows() async {
-        let fetcher = StubFetcher(routes: [("githubstatus", Data("oops".utf8), 503)])
-        let provider = StatuspageProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "github", name: "GitHub", kind: .statuspage,
-                              url: URL(string: "https://www.githubstatus.com")!)
-        await XCTAssertThrowsErrorAsync(try await provider.fetchStatus(for: site))
+    func testParseThrowOnBadJSON() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        await XCTAssertThrowsErrorAsync(try await adapter.parse(body: "not json", baseURL: "x"))
     }
 }
 
-final class AWSHealthProviderTests: XCTestCase {
-    func testStatusCodeMapping() {
-        XCTAssertEqual(AWSHealthProvider.level(forStatusCode: "0"), .operational)
-        XCTAssertEqual(AWSHealthProvider.level(forStatusCode: "1"), .minor)
-        XCTAssertEqual(AWSHealthProvider.level(forStatusCode: "2"), .minor)
-        XCTAssertEqual(AWSHealthProvider.level(forStatusCode: "3"), .major)
+// MARK: - Registry
+
+final class AdapterRegistryTests: XCTestCase {
+    func testIndexesAndAggregatesSuggestedSites() throws {
+        let a = try JSAdapter(script: testAdapterScript)
+        let registry = AdapterRegistry(adapters: [a])
+        XCTAssertEqual(registry.adapterIDs, ["test"])
+        XCTAssertNotNil(registry.adapter(id: "test"))
+        XCTAssertNil(registry.adapter(id: "nope"))
+        XCTAssertEqual(registry.suggestedSites.map(\.id), ["example"])
     }
 
-    func testUTF16Normalization() {
-        let json = #"[{"status":"3","summary":"Increased Error Rates"}]"#
-        // Encode as UTF-16 with BOM, as AWS serves it.
-        let utf16 = json.data(using: .utf16)!
-        let normalized = AWSHealthProvider.normalizedUTF8(utf16)
-        let decoded = String(data: normalized, encoding: .utf8)
-        XCTAssertEqual(decoded, json)
+    func testLoadsBareJSFileFromDirectory() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("adaptertest-\(UUID().uuidString)")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+
+        let js = """
+        defineAdapter({
+          id: 'dropin', name: 'Drop In',
+          endpoint: function (b) { return b; },
+          parse: function (x) { return { level: 'operational', detail: 'ok' }; },
+          suggestedSites: [{ id: 'd', name: 'D', url: 'https://d.com' }]
+        });
+        """
+        try js.write(to: dir.appendingPathComponent("dropin.js"), atomically: true, encoding: .utf8)
+
+        let registry = AdapterRegistry.load(searchPaths: [dir])
+        XCTAssertEqual(registry.adapterIDs, ["dropin"])
+        XCTAssertEqual(registry.suggestedSites.map(\.id), ["d"])
+        XCTAssertEqual(registry.suggestedSites.first?.adapterID, "dropin")
+    }
+}
+
+// MARK: - Monitor
+
+final class StatusMonitorTests: XCTestCase {
+    func testRefreshMapsAdapterResultsAndOrder() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        let registry = AdapterRegistry(adapters: [adapter])
+        let good = #"{"level":"major","detail":"Boom","issues":[]}"#
+        let fetcher = StubFetcher(routes: [("x.com", Data(good.utf8), 200)])
+        let monitor = StatusMonitor(registry: registry, fetcher: fetcher)
+
+        let config = AppConfiguration(sites: [
+            SiteConfig(id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!),
+            SiteConfig(id: "s2", name: "Two", adapterID: "missing", url: URL(string: "https://y.com")!),
+            SiteConfig(id: "off", name: "Off", adapterID: "test", url: URL(string: "https://x.com")!, enabled: false),
+        ])
+
+        let results = await monitor.refresh(config: config)
+        XCTAssertEqual(results.map(\.siteID), ["s1", "s2"])           // enabled only, in order
+        XCTAssertEqual(results[0].level, .major)
+        XCTAssertEqual(results[0].detail, "Boom")
+        XCTAssertEqual(results[1].level, .unknown)                     // no adapter
     }
 
-    func testFetchPicksWorstEvent() async throws {
-        let json = #"[{"status":"1","summary":"Info"},{"status":"3","summary":"Big Outage"}]"#
-        let fetcher = StubFetcher(routes: [("currentevents", json.data(using: .utf16)!, 200)])
-        let provider = AWSHealthProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "aws", name: "AWS", kind: .awsHealth,
-                              url: URL(string: "https://health.aws.amazon.com/public/currentevents")!)
+    func testNon2xxBecomesUnknown() async throws {
+        let adapter = try JSAdapter(script: testAdapterScript)
+        let registry = AdapterRegistry(adapters: [adapter])
+        let fetcher = StubFetcher(routes: [("x.com", Data("oops".utf8), 503)])
+        let monitor = StatusMonitor(registry: registry, fetcher: fetcher)
+        let config = AppConfiguration(sites: [
+            SiteConfig(id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!),
+        ])
+        let results = await monitor.refresh(config: config)
+        XCTAssertEqual(results[0].level, .unknown)
+    }
+}
 
-        let status = try await provider.fetchStatus(for: site)
-        XCTAssertEqual(status.level, .major)
-        XCTAssertEqual(status.issues.count, 2)
-        XCTAssertTrue(status.issues.contains { $0.title == "Big Outage" && $0.level == .major })
+// MARK: - Model
+
+final class SiteConfigMigrationTests: XCTestCase {
+    private func decode(_ json: String) throws -> SiteConfig {
+        try JSONDecoder().decode(SiteConfig.self, from: Data(json.utf8))
     }
 
-    func testEmptyFeedIsOperational() async throws {
-        let fetcher = StubFetcher(routes: [("currentevents", "[]".data(using: .utf16)!, 200)])
-        let provider = AWSHealthProvider(fetcher: fetcher)
-        let site = SiteConfig(id: "aws", name: "AWS", kind: .awsHealth,
-                              url: URL(string: "https://health.aws.amazon.com/public/currentevents")!)
+    func testLegacyKindMigratesToAdapterID() throws {
+        let sp = try decode(#"{"id":"gh","name":"GitHub","kind":"statuspage","url":"https://x.com"}"#)
+        XCTAssertEqual(sp.adapterID, "statuspage")
+        let aws = try decode(#"{"id":"aws","name":"AWS","kind":"awsHealth","url":"https://x.com"}"#)
+        XCTAssertEqual(aws.adapterID, "aws")
+    }
 
-        let status = try await provider.fetchStatus(for: site)
-        XCTAssertEqual(status.level, .operational)
+    func testAdapterIDFieldWins() throws {
+        let c = try decode(#"{"id":"x","name":"X","adapterID":"custom","url":"https://x.com","enabled":false}"#)
+        XCTAssertEqual(c.adapterID, "custom")
+        XCTAssertFalse(c.enabled)
+    }
+
+    func testRoundTripEncodesAdapterID() throws {
+        let original = SiteConfig(id: "x", name: "X", adapterID: "statuspage", url: URL(string: "https://x.com")!)
+        let data = try JSONEncoder().encode(original)
+        XCTAssertTrue(String(data: data, encoding: .utf8)!.contains("\"adapterID\""))
+        XCTAssertEqual(try JSONDecoder().decode(SiteConfig.self, from: data), original)
     }
 }
 
@@ -133,7 +192,6 @@ final class IssueCollapseTests: XCTestCase {
         }
         let collapsed = issues.collapsed()
         XCTAssertEqual(collapsed.count, 1)
-        // Multi-component group drops the component in favor of the title alone.
         XCTAssertNil(collapsed.first?.component)
         XCTAssertEqual(collapsed.first?.title, "Project status change failures")
     }
@@ -146,9 +204,50 @@ final class IssueCollapseTests: XCTestCase {
         ]
         let collapsed = issues.collapsed()
         XCTAssertEqual(collapsed.map(\.title), ["One", "Two"])
-        XCTAssertEqual(collapsed.first?.level, .major) // worst wins
-        XCTAssertNil(collapsed.first?.component)       // "One" spanned A + C
-        XCTAssertEqual(collapsed.last?.component, "B")  // "Two" single component kept
+        XCTAssertEqual(collapsed.first?.level, .major)
+        XCTAssertNil(collapsed.first?.component)
+        XCTAssertEqual(collapsed.last?.component, "B")
+    }
+}
+
+final class RelativeAgeTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    func testBuckets() {
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(-30), now: now), "just now")
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(-5 * 60), now: now), "5m ago")
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(-2 * 3600), now: now), "2h ago")
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(-3 * 86400), now: now), "3d ago")
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(-14 * 86400), now: now), "2w ago")
+    }
+
+    func testFutureClampsToJustNow() {
+        XCTAssertEqual(relativeAge(now.addingTimeInterval(120), now: now), "just now")
+    }
+}
+
+final class IssueStartedAtTests: XCTestCase {
+    func testAdapterParsesStartedAt() async throws {
+        let script = """
+        globalThis.__STATUSBAR_ADAPTER__ = {
+          id: 't', name: 'T', endpoint: function(b){return b;},
+          parse: function(body){ return { level: 'major', detail: 'x',
+            issues: [{ title: 'boom', startedAt: '2026-07-09T04:34:24.849Z' }] }; }
+        };
+        """
+        let adapter = try JSAdapter(script: script)
+        let parsed = try await adapter.parse(body: "{}", baseURL: "x")
+        XCTAssertNotNil(parsed.issues.first?.startedAt)
+    }
+
+    func testCollapseKeepsEarliestStart() {
+        let early = Date(timeIntervalSince1970: 100)
+        let late = Date(timeIntervalSince1970: 500)
+        let issues = [
+            SiteIssue(component: "A", title: "Same", level: .minor, startedAt: late),
+            SiteIssue(component: "B", title: "Same", level: .minor, startedAt: early),
+        ]
+        XCTAssertEqual(issues.collapsed().first?.startedAt, early)
     }
 }
 
@@ -166,35 +265,7 @@ final class AggregationTests: XCTestCase {
     }
 }
 
-final class StatusMonitorTests: XCTestCase {
-    func testRefreshReturnsRowPerEnabledSiteInOrder() async {
-        let gh = #"{"status":{"indicator":"none","description":"OK"}}"#
-        let fetcher = StubFetcher(routes: [
-            ("githubstatus", Data(gh.utf8), 200),
-            ("currentevents", "[]".data(using: .utf16)!, 200),
-            // vercel-status intentionally unrouted -> 404 -> .unknown
-        ])
-        let monitor = StatusMonitor(fetcher: fetcher)
-        let config = AppConfiguration(sites: [
-            SiteConfig(id: "vercel", name: "Vercel", kind: .statuspage,
-                       url: URL(string: "https://www.vercel-status.com")!),
-            SiteConfig(id: "github", name: "GitHub", kind: .statuspage,
-                       url: URL(string: "https://www.githubstatus.com")!),
-            SiteConfig(id: "aws", name: "AWS", kind: .awsHealth,
-                       url: URL(string: "https://health.aws.amazon.com/public/currentevents")!),
-            SiteConfig(id: "off", name: "Off", kind: .statuspage,
-                       url: URL(string: "https://example.com")!, enabled: false),
-        ])
-
-        let results = await monitor.refresh(config: config)
-        XCTAssertEqual(results.map(\.siteID), ["vercel", "github", "aws"])
-        XCTAssertEqual(results[0].level, .unknown)     // unrouted
-        XCTAssertEqual(results[1].level, .operational) // github OK
-        XCTAssertEqual(results[2].level, .operational) // aws empty feed
-    }
-}
-
-// MARK: - Async assertion helper
+// MARK: - Helpers
 
 func XCTAssertThrowsErrorAsync(
     _ expression: @autoclosure () async throws -> some Any,

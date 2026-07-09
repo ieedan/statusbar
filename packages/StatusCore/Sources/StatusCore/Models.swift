@@ -26,34 +26,55 @@ public enum StatusLevel: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// The kind of upstream status source backing a site.
-public enum ProviderKind: String, Codable, Sendable {
-    /// An Atlassian Statuspage instance exposing `/api/v2/status.json`.
-    case statuspage
-    /// The AWS Health "current events" JSON feed.
-    case awsHealth
-}
-
 /// A configured site to monitor.
 public struct SiteConfig: Codable, Sendable, Identifiable, Equatable {
     /// Stable identifier, e.g. `"github"`. Used to correlate results across refreshes.
     public var id: String
     /// Human-facing display name, e.g. `"GitHub"`.
     public var name: String
-    /// Which provider knows how to read this site's status.
-    public var kind: ProviderKind
-    /// For `.statuspage`: the page base URL (e.g. `https://www.githubstatus.com`).
-    /// For `.awsHealth`: the current-events feed URL.
+    /// Which adapter reads this site's status, e.g. `"statuspage"` or `"aws"`.
+    public var adapterID: String
+    /// The site's base URL, passed to the adapter's `endpoint(baseURL)`.
     public var url: URL
     /// Whether this site is actively monitored.
     public var enabled: Bool
 
-    public init(id: String, name: String, kind: ProviderKind, url: URL, enabled: Bool = true) {
+    public init(id: String, name: String, adapterID: String, url: URL, enabled: Bool = true) {
         self.id = id
         self.name = name
-        self.kind = kind
+        self.adapterID = adapterID
         self.url = url
         self.enabled = enabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, adapterID, url, enabled, kind
+    }
+
+    /// Custom decode so configs written before adapters existed still load:
+    /// the legacy `kind` field ("statuspage"/"awsHealth") maps to an adapter id.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        url = try c.decode(URL.self, forKey: .url)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        if let adapter = try c.decodeIfPresent(String.self, forKey: .adapterID) {
+            adapterID = adapter
+        } else if let legacy = try c.decodeIfPresent(String.self, forKey: .kind) {
+            adapterID = (legacy == "awsHealth") ? "aws" : legacy
+        } else {
+            adapterID = "statuspage"
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(adapterID, forKey: .adapterID)
+        try c.encode(url, forKey: .url)
+        try c.encode(enabled, forKey: .enabled)
     }
 }
 
@@ -67,11 +88,14 @@ public struct SiteIssue: Sendable, Equatable, Identifiable {
     public let title: String
     /// Severity of this specific issue.
     public let level: StatusLevel
+    /// When the issue began, if the source reports it.
+    public let startedAt: Date?
 
-    public init(component: String?, title: String, level: StatusLevel) {
+    public init(component: String?, title: String, level: StatusLevel, startedAt: Date? = nil) {
         self.component = component
         self.title = title
         self.level = level
+        self.startedAt = startedAt
     }
 
     /// One-line rendering, e.g. `"Actions — Delays starting Actions runs"`.
@@ -143,7 +167,8 @@ public extension Array where Element == SiteIssue {
             let group = groups[title]!
             let worst = group.max { $0.level.severity < $1.level.severity }?.level ?? .unknown
             let component = group.count == 1 ? group[0].component : nil
-            return SiteIssue(component: component, title: title, level: worst)
+            let earliest = group.compactMap(\.startedAt).min()
+            return SiteIssue(component: component, title: title, level: worst, startedAt: earliest)
         }
     }
 }

@@ -12,5 +12,9 @@ DerivedData/
 dist/
 *.app
 
+# Node / adapters
+node_modules/
+adapters/*/dist/
+
 # macOS
 .DS_Store

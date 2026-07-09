@@ -5,9 +5,14 @@ import StatusCore
 // status APIs, prints a summary, and exits. Useful for diagnostics and CI, and
 // exercises the exact monitor pipeline the menubar uses.
 if CommandLine.arguments.contains("--check") {
-    let store = ConfigurationStore()
+    let registry = AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
+    let store = ConfigurationStore(defaultConfig: AppConfiguration(sites: registry.suggestedSites))
     let config = store.loadOrCreateDefault()
-    let monitor = StatusMonitor()
+    let monitor = StatusMonitor(registry: registry)
+
+    if registry.adapterIDs.isEmpty {
+        print("⚠️  No adapters loaded. Build them with `make adapters` or set STATUSBAR_ADAPTERS_DIR.")
+    }
 
     let done = DispatchSemaphore(value: 0)
     // Detached so the work runs off the main thread — top-level code in an
@@ -27,12 +32,28 @@ if CommandLine.arguments.contains("--check") {
         for status in results {
             print("  \(symbol(status.level)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(status.detail)")
             for issue in status.issues {
-                print("       ↳ \(issue.summary)")
+                let age = issue.startedAt.map { " (started \(relativeAge($0)))" } ?? ""
+                print("       ↳ \(issue.summary)\(age)")
             }
         }
         done.signal()
     }
     done.wait()
+    exit(0)
+}
+
+// List loaded adapters (built-in + user-installed) and their suggested sites.
+if CommandLine.arguments.contains("--adapters") {
+    let registry = AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
+    print("User adapters folder: \(AdapterRegistry.userAdaptersDirectory.path)")
+    if registry.adapterIDs.isEmpty {
+        print("No adapters loaded.")
+    } else {
+        for id in registry.adapterIDs {
+            let sites = registry.suggestedSites.filter { $0.adapterID == id }.map(\.name)
+            print("  • \(id)  (suggests: \(sites.isEmpty ? "—" : sites.joined(separator: ", ")))")
+        }
+    }
     exit(0)
 }
 

@@ -23,7 +23,9 @@ final class ServiceTableView: NSTableView {
 @MainActor
 final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
     private let store: ConfigurationStore
+    private var registry: AdapterRegistry
     private let onChange: () -> Void
+    private let reloadAdapters: () -> AdapterRegistry
 
     private var sites: [SiteConfig] = []
     private var refreshIntervalSeconds = 60
@@ -32,9 +34,14 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     private let dragType = NSPasteboard.PasteboardType("dev.statusbar.service.row")
 
-    init(store: ConfigurationStore, onChange: @escaping () -> Void) {
+    init(store: ConfigurationStore,
+         registry: AdapterRegistry,
+         onChange: @escaping () -> Void,
+         reloadAdapters: @escaping () -> AdapterRegistry) {
         self.store = store
+        self.registry = registry
         self.onChange = onChange
+        self.reloadAdapters = reloadAdapters
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 420),
@@ -110,6 +117,10 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         removeButton.translatesAutoresizingMaskIntoConstraints = false
         removeButton.widthAnchor.constraint(equalToConstant: 30).isActive = true
 
+        let adaptersButton = NSButton(title: "Adapters…", target: self, action: #selector(showAdaptersMenu(_:)))
+        adaptersButton.bezelStyle = .rounded
+        adaptersButton.translatesAutoresizingMaskIntoConstraints = false
+
         let hint = NSTextField(labelWithString: "Drag to reorder · right-click a row for options")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
@@ -123,7 +134,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         loginCheck.state = LoginItem.isEnabled ? .on : .off
         self.loginCheckbox = loginCheck
 
-        let bar = NSStackView(views: [addButton, removeButton, hint, spacer, loginCheck])
+        let bar = NSStackView(views: [addButton, removeButton, hint, spacer, adaptersButton, loginCheck])
         bar.orientation = .horizontal
         bar.spacing = 6
         bar.translatesAutoresizingMaskIntoConstraints = false
@@ -279,7 +290,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     @objc private func showAddMenu(_ sender: NSButton) {
         let menu = NSMenu()
-        for entry in ServiceCatalog.available(excluding: sites) {
+        let taken = Set(sites.map(\.id))
+        for entry in registry.suggestedSites where !taken.contains(entry.id) {
             let item = NSMenuItem(title: entry.name, action: #selector(addCatalogService(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = entry
@@ -309,18 +321,26 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     @objc private func addCustomService() {
         let alert = NSAlert()
         alert.messageText = "Add a Service"
-        alert.informativeText = "Enter a name and its Atlassian Statuspage base URL (e.g. https://status.example.com)."
+        alert.informativeText = "Enter a name, its base URL, and the adapter that reads it."
         alert.addButton(withTitle: "Add")
         alert.addButton(withTitle: "Cancel")
 
-        let nameField = NSTextField(frame: NSRect(x: 0, y: 30, width: 320, height: 24))
+        let nameField = NSTextField(frame: NSRect(x: 0, y: 62, width: 320, height: 24))
         nameField.placeholderString = "Name"
-        let urlField = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        let urlField = NSTextField(frame: NSRect(x: 0, y: 32, width: 320, height: 24))
         urlField.placeholderString = "https://status.example.com"
 
-        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 58))
+        let adapterPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26))
+        let ids = registry.adapterIDs
+        adapterPopup.addItems(withTitles: ids)
+        if let statuspageIndex = ids.firstIndex(of: "statuspage") {
+            adapterPopup.selectItem(at: statuspageIndex)
+        }
+
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 90))
         accessory.addSubview(nameField)
         accessory.addSubview(urlField)
+        accessory.addSubview(adapterPopup)
         alert.accessoryView = accessory
         alert.window.initialFirstResponder = nameField
 
@@ -328,6 +348,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
         let name = nameField.stringValue.trimmingCharacters(in: .whitespaces)
         let urlString = urlField.stringValue.trimmingCharacters(in: .whitespaces)
+        let adapterID = adapterPopup.titleOfSelectedItem ?? "statuspage"
         guard !name.isEmpty, let url = URL(string: urlString), url.scheme?.hasPrefix("http") == true else {
             let err = NSAlert()
             err.messageText = "Invalid service"
@@ -337,7 +358,7 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         }
 
         let id = Self.slug(name, existing: sites.map(\.id))
-        sites.append(SiteConfig(id: id, name: name, kind: .statuspage, url: url))
+        sites.append(SiteConfig(id: id, name: name, adapterID: adapterID, url: url))
         tableView.reloadData()
         persist()
     }
@@ -372,6 +393,105 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
             alert.alertStyle = .warning
             alert.runModal()
         }
+    }
+
+    // MARK: - Adapters (install / reveal)
+
+    @objc private func showAdaptersMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+
+        let loaded = NSMenuItem(
+            title: "Loaded: \(registry.adapterIDs.isEmpty ? "none" : registry.adapterIDs.joined(separator: ", "))",
+            action: nil, keyEquivalent: "")
+        loaded.isEnabled = false
+        menu.addItem(loaded)
+        menu.addItem(.separator())
+
+        let install = NSMenuItem(title: "Install Adapter…", action: #selector(installAdapter), keyEquivalent: "")
+        install.target = self
+        menu.addItem(install)
+
+        let reveal = NSMenuItem(title: "Reveal Adapters Folder", action: #selector(revealAdaptersFolder), keyEquivalent: "")
+        reveal.target = self
+        menu.addItem(reveal)
+
+        let location = NSPoint(x: 0, y: sender.bounds.height + 4)
+        menu.popUp(positioning: nil, at: location, in: sender)
+    }
+
+    @objc private func installAdapter() {
+        let panel = NSOpenPanel()
+        panel.title = "Install Adapter"
+        panel.message = "Choose an adapter .js file (or an adapter folder containing adapter.json)."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+
+        do {
+            try copyInAdapter(from: source)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't install adapter"
+            alert.informativeText = (error as? AdapterInstallError)?.message ?? error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+    }
+
+    private enum AdapterInstallError: Error {
+        case notJavaScript
+        case invalidScript(String)
+
+        var message: String {
+            switch self {
+            case .notJavaScript:
+                return "Select a .js file or an adapter folder."
+            case .invalidScript(let detail):
+                return "That file isn't a valid adapter.\n\n\(detail)"
+            }
+        }
+    }
+
+    private func copyInAdapter(from source: URL) throws {
+        let fm = FileManager.default
+        let destDir = AdapterRegistry.userAdaptersDirectory
+        try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+        let isDirectory = (try? source.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+
+        if !isDirectory {
+            guard source.pathExtension == "js" else { throw AdapterInstallError.notJavaScript }
+            // Validate before copying so bad files are rejected with a clear reason.
+            let script = try String(contentsOf: source, encoding: .utf8)
+            do { _ = try JSAdapter(script: script) }
+            catch { throw AdapterInstallError.invalidScript("\(error)") }
+        }
+
+        let target = destDir.appendingPathComponent(source.lastPathComponent)
+        if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+        try fm.copyItem(at: source, to: target)
+
+        // Rebuild the registry app-wide and reflect new suggested sites here.
+        let before = Set(registry.adapterIDs)
+        registry = reloadAdapters()
+        let added = registry.adapterIDs.filter { !before.contains($0) }
+        tableView.reloadData()
+
+        let alert = NSAlert()
+        alert.messageText = "Adapter installed"
+        if added.isEmpty {
+            alert.informativeText = "Copied \"\(source.lastPathComponent)\". No new adapter id appeared — it may replace an existing one or failed to load."
+        } else {
+            alert.informativeText = "Added: \(added.joined(separator: ", ")). Any suggested sites are now in the + menu."
+        }
+        alert.runModal()
+    }
+
+    @objc private func revealAdaptersFolder() {
+        let dir = AdapterRegistry.userAdaptersDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.activateFileViewerSelecting([dir])
     }
 
     // MARK: - Persistence

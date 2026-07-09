@@ -28,11 +28,14 @@ This is a Swift monorepo with two packages:
 
 | Path | What it is |
 | --- | --- |
-| [`packages/StatusCore`](packages/StatusCore) | UI-agnostic library: models, status providers, the refresh engine, and config. Fully unit-tested. |
+| [`packages/StatusCore`](packages/StatusCore) | UI-agnostic library: models, the adapter runtime (JavaScriptCore), refresh engine, and config. Fully unit-tested. |
 | [`apps/StatusBar`](apps/StatusBar) | The AppKit menubar agent (`LSUIElement`), depending on `StatusCore`. |
+| [`adapters/`](adapters) | TypeScript **adapters** — pluggable per-source status parsers, plus the SDK. |
 
-Keeping the logic in `StatusCore` means the network/parsing behavior is testable
-without launching a UI, and a second front-end (CLI, SwiftUI, etc.) could reuse it.
+Keeping the logic in `StatusCore` means behavior is testable without launching a
+UI. How to read each site's status lives in **adapters** — small TypeScript
+plugins the app runs in JavaScriptCore — so adding support for a new site doesn't
+require touching Swift. See [adapters/README.md](adapters/README.md).
 
 ## Develop
 
@@ -112,13 +115,32 @@ After editing by hand, run **Reload Config & Refresh**. Each site has:
 
 `refreshIntervalSeconds` controls how often every site is re-checked (minimum 15s).
 
+## Plugins (adapters)
+
+Support for a new site is a small **adapter** — you don't need to rebuild the app.
+No terminal required:
+
+- **Install:** Settings… → **Adapters… → Install Adapter…**, pick a `.js` file
+  (or drop one into **Reveal Adapters Folder**). It loads immediately and its
+  suggested sites appear in the **+** menu.
+- **Author:** an adapter can be a single hand-written `.js` file — no TypeScript,
+  no build. See [adapters/README.md](adapters/README.md), or run
+  [`/create-adapter`](.claude/skills/create-adapter/SKILL.md).
+
 ## How status is determined
 
-- **Statuspage** (`/api/v2/summary.json`) exposes an overall `indicator` —
-  `none` → green, `minor`/`maintenance` → orange, `major`/`critical` → red — plus
-  the active `incidents` and their affected `components`, which become the
-  per-site detail lines. If an incident-free page still reports degraded
-  components, those are shown instead.
-- **AWS** returns a list of active events (numeric severity `1`/`2` → orange,
-  `3` → red), each surfaced as a detail line; an empty list means all clear.
-- The menubar icon reflects the **worst** level across all monitored sites.
+Each site names an **adapter** that knows how to read its status. Adapters are
+pure TypeScript parsers ([adapters/](adapters)): the app fetches, the adapter
+normalizes the response into a level + issues. Two ship built-in:
+
+- **statuspage** — reads any Atlassian Statuspage `/api/v2/summary.json`: the
+  overall `indicator` (`none` → gray, `minor` → orange, `major`/`critical` → red)
+  plus active `incidents`/`components`, which become the per-site detail lines.
+- **aws** — reads the AWS Health current-events feed (numeric severity
+  `1`/`2` → orange, `3` → red).
+
+Each adapter also contributes `suggestedSites`, which populate Settings' **Add
+service** menu — so installing an adapter adds its sites. Write your own with the
+[`/create-adapter`](.claude/skills/create-adapter/SKILL.md) skill.
+
+The menubar icon reflects the **worst** level across all monitored sites.

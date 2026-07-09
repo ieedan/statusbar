@@ -1,0 +1,6 @@
+{
+  "id": "aws",
+  "name": "AWS Health",
+  "description": "AWS Health current-events feed (not a Statuspage).",
+  "entry": "dist/index.js"
+}

@@ -19,10 +19,21 @@ echo "› Building release binary…"
 ( cd "$ROOT/apps/StatusBar" && swift build -c release )
 BIN="$ROOT/apps/StatusBar/.build/release/$EXECUTABLE"
 
+"$ROOT/scripts/build-adapters.sh"
+
 echo "› Assembling $APP_NAME.app…"
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp "$BIN" "$CONTENTS/MacOS/$EXECUTABLE"
+
+echo "› Bundling adapters…"
+for dir in "$ROOT"/adapters/*/; do
+  [ -f "$dir/adapter.json" ] || continue
+  id="$(basename "$dir")"
+  mkdir -p "$CONTENTS/Resources/adapters/$id"
+  cp "$dir/adapter.json" "$CONTENTS/Resources/adapters/$id/"
+  cp -R "$dir/dist" "$CONTENTS/Resources/adapters/$id/dist"
+done
 
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
