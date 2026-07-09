@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = StatusIcons.shape(for: .unknown, filled: false, size: 15)
+        statusItem.button?.image = StatusIcons.shape(for: .unknown, filled: false, size: 15, template: true)
         statusItem.button?.toolTip = "Site Status"
         statusItem.menu = NSMenu()
         rebuildMenu()
@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func render() {
         let overall = results.overallLevel(threshold: staleThreshold, now: Date())
-        statusItem.button?.image = StatusIcons.shape(for: overall, filled: false, size: 15)
+        statusItem.button?.image = StatusIcons.shape(for: overall, filled: false, size: 15, template: true)
         statusItem.button?.toolTip = "Site Status — \(StatusIcons.label(for: overall))"
         rebuildMenu()
     }
