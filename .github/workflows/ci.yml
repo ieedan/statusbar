@@ -1,0 +1,77 @@
+name: CI
+
+# Code-quality gate. Runs ONLY on pull requests so a broken tree can't reach
+# `main`. Never runs on pushes to `main` (that's what release.yml is for).
+#
+# Two independent jobs run in parallel:
+#   • adapters — format, type-check and build the TypeScript adapters (Linux).
+#   • swift    — format-lint, build and test the Swift packages (macOS).
+on:
+  pull_request:
+
+# A newer push to the same PR cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adapters:
+    name: Adapters (format · typecheck · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: adapters/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Build adapters
+        run: pnpm build
+
+  swift:
+    name: Swift (format · build · test)
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Check formatting
+        run: >
+          swift format lint --strict --recursive --configuration .swift-format
+          packages/StatusCore/Sources
+          apps/StatusBar/Sources
+          packages/StatusCore/Tests
+
+      - name: Build StatusCore
+        working-directory: packages/StatusCore
+        run: swift build
+
+      - name: Build StatusBar
+        working-directory: apps/StatusBar
+        run: swift build
+
+      - name: Test StatusCore
+        working-directory: packages/StatusCore
+        run: swift test

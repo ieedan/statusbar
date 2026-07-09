@@ -26,8 +26,10 @@ public struct ConfigurationStore: Sendable {
         if let fileURL {
             self.fileURL = fileURL
         } else {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            self.fileURL = base
+            let base = FileManager.default.urls(
+                for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            self.fileURL =
+                base
                 .appendingPathComponent("StatusBar", isDirectory: true)
                 .appendingPathComponent("config.json")
         }
@@ -43,7 +45,8 @@ public struct ConfigurationStore: Sendable {
     /// or the existing file is unreadable.
     public func loadOrCreateDefault() -> AppConfiguration {
         if let data = try? Data(contentsOf: fileURL),
-           let config = try? JSONDecoder().decode(AppConfiguration.self, from: data) {
+            let config = try? JSONDecoder().decode(AppConfiguration.self, from: data)
+        {
             return config
         }
         try? save(defaultConfig)

@@ -12,11 +12,11 @@ enum LoginItem {
 
     static var statusDescription: String {
         switch SMAppService.mainApp.status {
-        case .enabled:          return "enabled"
-        case .notRegistered:    return "not registered"
+        case .enabled: return "enabled"
+        case .notRegistered: return "not registered"
         case .requiresApproval: return "requires approval in System Settings › Login Items"
-        case .notFound:         return "not found"
-        @unknown default:       return "unknown"
+        case .notFound: return "not found"
+        @unknown default: return "unknown"
         }
     }
 

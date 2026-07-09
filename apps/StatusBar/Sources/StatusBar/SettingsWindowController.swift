@@ -22,7 +22,8 @@ final class ServiceTableView: NSTableView {
 /// dropdown itself is an `NSMenu`, which can't host drags. Every edit is
 /// persisted immediately and `onChange` fires so the menubar refreshes.
 @MainActor
-final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+final class SettingsWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate
+{
     private let store: ConfigurationStore
     private var registry: AdapterRegistry
     private let onChange: () -> Void
@@ -35,10 +36,12 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     private let dragType = NSPasteboard.PasteboardType("dev.statusbar.service.row")
 
-    init(store: ConfigurationStore,
-         registry: AdapterRegistry,
-         onChange: @escaping () -> Void,
-         reloadAdapters: @escaping () -> AdapterRegistry) {
+    init(
+        store: ConfigurationStore,
+        registry: AdapterRegistry,
+        onChange: @escaping () -> Void,
+        reloadAdapters: @escaping () -> AdapterRegistry
+    ) {
         self.store = store
         self.registry = registry
         self.onChange = onChange
@@ -78,7 +81,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     /// first (preserving their order and enabled state); any adapter-suggested
     /// site not yet configured is appended, disabled, so the user opts in with
     /// the checkbox. This is why there are no add/remove buttons.
-    private static func merged(configured: [SiteConfig], suggestions: [SiteConfig]) -> [SiteConfig] {
+    private static func merged(configured: [SiteConfig], suggestions: [SiteConfig]) -> [SiteConfig]
+    {
         var result = configured
         let taken = Set(configured.map(\.id))
         for suggestion in suggestions where !taken.contains(suggestion.id) {
@@ -130,7 +134,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         // Bottom bar: a hint plus the Adapters and Launch-at-login controls.
         // Services are added/removed purely via each row's checkbox — every known
         // service is always listed, so there are no +/- buttons.
-        let adaptersButton = NSButton(title: "Adapters…", target: self, action: #selector(showAdaptersMenu(_:)))
+        let adaptersButton = NSButton(
+            title: "Adapters…", target: self, action: #selector(showAdaptersMenu(_:)))
         adaptersButton.bezelStyle = .rounded
         adaptersButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -142,8 +147,9 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
 
-        let loginCheck = NSButton(checkboxWithTitle: "Launch at login",
-                                  target: self, action: #selector(toggleLoginItem(_:)))
+        let loginCheck = NSButton(
+            checkboxWithTitle: "Launch at login",
+            target: self, action: #selector(toggleLoginItem(_:)))
         loginCheck.state = LoginItem.isEnabled ? .on : .off
         self.loginCheckbox = loginCheck
 
@@ -171,11 +177,14 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     func numberOfRows(in tableView: NSTableView) -> Int { sites.count }
 
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int)
+        -> NSView?
+    {
         let site = sites[row]
         switch tableColumn?.identifier.rawValue {
         case "enabled":
-            let check = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggleEnabled(_:)))
+            let check = NSButton(
+                checkboxWithTitle: "", target: self, action: #selector(toggleEnabled(_:)))
             check.state = site.enabled ? .on : .off
             return check
         case "name":
@@ -205,21 +214,28 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
 
     // MARK: - Drag to reorder
 
-    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int)
+        -> NSPasteboardWriting?
+    {
         let item = NSPasteboardItem()
         item.setString(String(row), forType: dragType)
         return item
     }
 
-    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo,
-                   proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+    func tableView(
+        _ tableView: NSTableView, validateDrop info: NSDraggingInfo,
+        proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation
+    ) -> NSDragOperation {
         dropOperation == .above ? .move : []
     }
 
-    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
-                   row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
+    func tableView(
+        _ tableView: NSTableView, acceptDrop info: NSDraggingInfo,
+        row: Int, dropOperation: NSTableView.DropOperation
+    ) -> Bool {
         guard let str = info.draggingPasteboard.pasteboardItems?.first?.string(forType: dragType),
-              let source = Int(str) else { return false }
+            let source = Int(str)
+        else { return false }
         var dest = row
         let moved = sites.remove(at: source)
         if source < dest { dest -= 1 }
@@ -250,7 +266,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         toggle.representedObject = row
         menu.addItem(toggle)
 
-        let open = NSMenuItem(title: "Open Status Page", action: #selector(contextOpen(_:)), keyEquivalent: "")
+        let open = NSMenuItem(
+            title: "Open Status Page", action: #selector(contextOpen(_:)), keyEquivalent: "")
         open.target = self
         open.representedObject = row
         menu.addItem(open)
@@ -259,14 +276,18 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
     }
 
     @objc private func contextToggle(_ sender: NSMenuItem) {
-        guard let row = sender.representedObject as? Int, sites.indices.contains(row) else { return }
+        guard let row = sender.representedObject as? Int, sites.indices.contains(row) else {
+            return
+        }
         sites[row].enabled.toggle()
         tableView.reloadData()
         persist()
     }
 
     @objc private func contextOpen(_ sender: NSMenuItem) {
-        guard let row = sender.representedObject as? Int, sites.indices.contains(row) else { return }
+        guard let row = sender.representedObject as? Int, sites.indices.contains(row) else {
+            return
+        }
         NSWorkspace.shared.open(sites[row].url)
     }
 
@@ -292,17 +313,21 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let menu = NSMenu()
 
         let loaded = NSMenuItem(
-            title: "Loaded: \(registry.adapterIDs.isEmpty ? "none" : registry.adapterIDs.joined(separator: ", "))",
+            title:
+                "Loaded: \(registry.adapterIDs.isEmpty ? "none" : registry.adapterIDs.joined(separator: ", "))",
             action: nil, keyEquivalent: "")
         loaded.isEnabled = false
         menu.addItem(loaded)
         menu.addItem(.separator())
 
-        let install = NSMenuItem(title: "Install Adapter…", action: #selector(installAdapter), keyEquivalent: "")
+        let install = NSMenuItem(
+            title: "Install Adapter…", action: #selector(installAdapter), keyEquivalent: "")
         install.target = self
         menu.addItem(install)
 
-        let reveal = NSMenuItem(title: "Reveal Adapters Folder", action: #selector(revealAdaptersFolder), keyEquivalent: "")
+        let reveal = NSMenuItem(
+            title: "Reveal Adapters Folder", action: #selector(revealAdaptersFolder),
+            keyEquivalent: "")
         reveal.target = self
         menu.addItem(reveal)
 
@@ -324,7 +349,8 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         } catch {
             let alert = NSAlert()
             alert.messageText = "Couldn't install adapter"
-            alert.informativeText = (error as? AdapterInstallError)?.message ?? error.localizedDescription
+            alert.informativeText =
+                (error as? AdapterInstallError)?.message ?? error.localizedDescription
             alert.alertStyle = .warning
             alert.runModal()
         }
@@ -349,14 +375,16 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let destDir = AdapterRegistry.userAdaptersDirectory
         try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
-        let isDirectory = (try? source.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        let isDirectory =
+            (try? source.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
 
         if !isDirectory {
             guard source.pathExtension == "js" else { throw AdapterInstallError.notJavaScript }
             // Validate before copying so bad files are rejected with a clear reason.
             let script = try String(contentsOf: source, encoding: .utf8)
-            do { _ = try JSAdapter(script: script) }
-            catch { throw AdapterInstallError.invalidScript("\(error)") }
+            do { _ = try JSAdapter(script: script) } catch {
+                throw AdapterInstallError.invalidScript("\(error)")
+            }
         }
 
         let target = destDir.appendingPathComponent(source.lastPathComponent)
@@ -373,9 +401,11 @@ final class SettingsWindowController: NSWindowController, NSTableViewDataSource,
         let alert = NSAlert()
         alert.messageText = "Adapter installed"
         if added.isEmpty {
-            alert.informativeText = "Copied \"\(source.lastPathComponent)\". No new adapter id appeared — it may replace an existing one or failed to load."
+            alert.informativeText =
+                "Copied \"\(source.lastPathComponent)\". No new adapter id appeared — it may replace an existing one or failed to load."
         } else {
-            alert.informativeText = "Added: \(added.joined(separator: ", ")). Its suggested sites are now in the list — check one to show it."
+            alert.informativeText =
+                "Added: \(added.joined(separator: ", ")). Its suggested sites are now in the list — check one to show it."
         }
         alert.runModal()
     }

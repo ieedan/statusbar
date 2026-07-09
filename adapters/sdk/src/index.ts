@@ -83,6 +83,7 @@ declare global {
  *   export default defineAdapter({ id, name, endpoint, parse });
  */
 export function defineAdapter(adapter: Adapter): Adapter {
-  (globalThis as { __STATUSBAR_ADAPTER__?: Adapter }).__STATUSBAR_ADAPTER__ = adapter;
+  (globalThis as { __STATUSBAR_ADAPTER__?: Adapter }).__STATUSBAR_ADAPTER__ =
+    adapter;
   return adapter;
 }

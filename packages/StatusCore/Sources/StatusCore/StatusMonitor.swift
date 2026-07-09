@@ -33,7 +33,9 @@ public actor StatusMonitor {
         return results.sorted { $0.0 < $1.0 }.map(\.1)
     }
 
-    private static func check(site: SiteConfig, registry: AdapterRegistry, fetcher: HTTPFetching) async -> SiteStatus {
+    private static func check(site: SiteConfig, registry: AdapterRegistry, fetcher: HTTPFetching)
+        async -> SiteStatus
+    {
         guard let adapter = registry.adapter(id: site.adapterID) else {
             return unknown(site, "No adapter '\(site.adapterID)'")
         }
@@ -62,7 +64,8 @@ public actor StatusMonitor {
     }
 
     private static func unknown(_ site: SiteConfig, _ detail: String) -> SiteStatus {
-        SiteStatus(siteID: site.id, name: site.name, level: .unknown,
-                   detail: detail, checkedAt: Date(), pageURL: site.url)
+        SiteStatus(
+            siteID: site.id, name: site.name, level: .unknown,
+            detail: detail, checkedAt: Date(), pageURL: site.url)
     }
 }

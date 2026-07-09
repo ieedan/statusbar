@@ -81,7 +81,12 @@ export default defineAdapter({
         issues.push({ title: incident.name, level: lvl, startedAt });
       } else {
         for (const component of affected) {
-          issues.push({ component: component.name, title: incident.name, level: lvl, startedAt });
+          issues.push({
+            component: component.name,
+            title: incident.name,
+            level: lvl,
+            startedAt,
+          });
         }
       }
     }
@@ -105,10 +110,18 @@ export default defineAdapter({
   suggestedSites: [
     { id: "vercel", name: "Vercel", url: "https://www.vercel-status.com" },
     { id: "github", name: "GitHub", url: "https://www.githubstatus.com" },
-    { id: "cloudflare", name: "Cloudflare", url: "https://www.cloudflarestatus.com" },
+    {
+      id: "cloudflare",
+      name: "Cloudflare",
+      url: "https://www.cloudflarestatus.com",
+    },
     { id: "anthropic", name: "Anthropic", url: "https://status.anthropic.com" },
     { id: "openai", name: "OpenAI", url: "https://status.openai.com" },
-    { id: "planetscale", name: "PlanetScale", url: "https://www.planetscalestatus.com" },
+    {
+      id: "planetscale",
+      name: "PlanetScale",
+      url: "https://www.planetscalestatus.com",
+    },
     { id: "supabase", name: "Supabase", url: "https://status.supabase.com" },
     { id: "convex", name: "Convex", url: "https://status.convex.dev" },
     { id: "discord", name: "Discord", url: "https://discordstatus.com" },

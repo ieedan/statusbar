@@ -27,7 +27,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let registry = await Task.detached {
                 AdapterRegistry.load(searchPaths: AdapterRegistry.defaultSearchPaths())
             }.value
-            let store = ConfigurationStore(defaultConfig: AppConfiguration(sites: registry.suggestedSites))
+            let store = ConfigurationStore(
+                defaultConfig: AppConfiguration(sites: registry.suggestedSites))
 
             self.registry = registry
             self.configStore = store
@@ -44,7 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleTimer() {
         refreshTimer?.invalidate()
         let interval = TimeInterval(max(15, config.refreshIntervalSeconds))
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) {
+            [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
     }
@@ -76,7 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let overall = results.overallLevel
 
-        let summary = NSMenuItem(title: StatusIcons.label(for: overall), action: nil, keyEquivalent: "")
+        let summary = NSMenuItem(
+            title: StatusIcons.label(for: overall), action: nil, keyEquivalent: "")
         summary.image = StatusIcons.shape(for: overall)
         summary.isEnabled = false
         menu.addItem(summary)
@@ -105,17 +108,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // capped so a single busy service can't dominate the menu.
                 for issue in status.issues.prefix(Self.maxIssuesPerSite) {
                     let age = issue.startedAt.map { "  ·  \(relativeAge($0))" } ?? ""
-                    let detail = NSMenuItem(title: Self.truncated(issue.summary, max: Self.maxIssueLength) + age, action: nil, keyEquivalent: "")
+                    let detail = NSMenuItem(
+                        title: Self.truncated(issue.summary, max: Self.maxIssueLength) + age,
+                        action: nil, keyEquivalent: "")
                     detail.indentationLevel = 2
                     detail.isEnabled = false
-                    detail.toolTip = issue.summary + (issue.startedAt.map {
-                        "\n\nStarted \(Self.fullTimeFormatter.string(from: $0))"
-                    } ?? "")
+                    detail.toolTip =
+                        issue.summary
+                        + (issue.startedAt.map {
+                            "\n\nStarted \(Self.fullTimeFormatter.string(from: $0))"
+                        } ?? "")
                     menu.addItem(detail)
                 }
                 let overflow = status.issues.count - Self.maxIssuesPerSite
                 if overflow > 0 {
-                    let more = NSMenuItem(title: "+\(overflow) more…", action: #selector(openSite(_:)), keyEquivalent: "")
+                    let more = NSMenuItem(
+                        title: "+\(overflow) more…", action: #selector(openSite(_:)),
+                        keyEquivalent: "")
                     more.target = self
                     more.representedObject = status.pageURL
                     more.indentationLevel = 2
@@ -220,7 +229,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             let alert = NSAlert()
             alert.messageText = "Couldn't load configuration"
-            alert.informativeText = "The config file is missing or contains invalid JSON.\n\n\(error.localizedDescription)"
+            alert.informativeText =
+                "The config file is missing or contains invalid JSON.\n\n\(error.localizedDescription)"
             alert.alertStyle = .warning
             alert.runModal()
         }

@@ -15,17 +15,17 @@ struct StubFetcher: HTTPFetching {
 
 /// A minimal inline adapter used across tests (no SDK/build step needed).
 private let testAdapterScript = """
-globalThis.__STATUSBAR_ADAPTER__ = {
-  id: 'test',
-  name: 'Test Adapter',
-  endpoint: function (base) { return base.replace(/\\/$/, '') + '/status.json'; },
-  parse: function (body, ctx) {
-    var d = JSON.parse(body);
-    return { level: d.level, detail: d.detail, issues: d.issues || [] };
-  },
-  suggestedSites: [{ id: 'example', name: 'Example', url: 'https://example.com' }]
-};
-"""
+    globalThis.__STATUSBAR_ADAPTER__ = {
+      id: 'test',
+      name: 'Test Adapter',
+      endpoint: function (base) { return base.replace(/\\/$/, '') + '/status.json'; },
+      parse: function (body, ctx) {
+        var d = JSON.parse(body);
+        return { level: d.level, detail: d.detail, issues: d.issues || [] };
+      },
+      suggestedSites: [{ id: 'example', name: 'Example', url: 'https://example.com' }]
+    };
+    """
 
 // MARK: - JSAdapter runtime
 
@@ -47,18 +47,20 @@ final class JSAdapterTests: XCTestCase {
 
     func testParseMapsLevelAndIssues() async throws {
         let adapter = try JSAdapter(script: testAdapterScript)
-        let body = #"{"level":"minor","detail":"Degraded","issues":[{"component":"API","title":"Slow"}]}"#
+        let body =
+            #"{"level":"minor","detail":"Degraded","issues":[{"component":"API","title":"Slow"}]}"#
         let parsed = try await adapter.parse(body: body, baseURL: "https://x.com")
         XCTAssertEqual(parsed.level, .minor)
         XCTAssertEqual(parsed.detail, "Degraded")
         XCTAssertEqual(parsed.issues.count, 1)
         XCTAssertEqual(parsed.issues.first?.summary, "API — Slow")
-        XCTAssertEqual(parsed.issues.first?.level, .minor) // inherits overall
+        XCTAssertEqual(parsed.issues.first?.level, .minor)  // inherits overall
     }
 
     func testInvalidLevelBecomesUnknown() async throws {
         let adapter = try JSAdapter(script: testAdapterScript)
-        let parsed = try await adapter.parse(body: #"{"level":"banana","detail":"?"}"#, baseURL: "x")
+        let parsed = try await adapter.parse(
+            body: #"{"level":"banana","detail":"?"}"#, baseURL: "x")
         XCTAssertEqual(parsed.level, .unknown)
     }
 
@@ -69,12 +71,12 @@ final class JSAdapterTests: XCTestCase {
     func testPlainJSViaHostDefineAdapter() throws {
         // No SDK import, no build — relies on the injected host `defineAdapter`.
         let script = """
-        defineAdapter({
-          id: 'plain', name: 'Plain JS',
-          endpoint: function (b) { return b; },
-          parse: function (body) { return { level: 'operational', detail: 'ok' }; }
-        });
-        """
+            defineAdapter({
+              id: 'plain', name: 'Plain JS',
+              endpoint: function (b) { return b; },
+              parse: function (body) { return { level: 'operational', detail: 'ok' }; }
+            });
+            """
         let adapter = try JSAdapter(script: script)
         XCTAssertEqual(adapter.id, "plain")
         XCTAssertEqual(adapter.name, "Plain JS")
@@ -105,13 +107,13 @@ final class AdapterRegistryTests: XCTestCase {
         defer { try? fm.removeItem(at: dir) }
 
         let js = """
-        defineAdapter({
-          id: 'dropin', name: 'Drop In',
-          endpoint: function (b) { return b; },
-          parse: function (x) { return { level: 'operational', detail: 'ok' }; },
-          suggestedSites: [{ id: 'd', name: 'D', url: 'https://d.com' }]
-        });
-        """
+            defineAdapter({
+              id: 'dropin', name: 'Drop In',
+              endpoint: function (b) { return b; },
+              parse: function (x) { return { level: 'operational', detail: 'ok' }; },
+              suggestedSites: [{ id: 'd', name: 'D', url: 'https://d.com' }]
+            });
+            """
         try js.write(to: dir.appendingPathComponent("dropin.js"), atomically: true, encoding: .utf8)
 
         let registry = AdapterRegistry.load(searchPaths: [dir])
@@ -132,16 +134,20 @@ final class StatusMonitorTests: XCTestCase {
         let monitor = StatusMonitor(registry: registry, fetcher: fetcher)
 
         let config = AppConfiguration(sites: [
-            SiteConfig(id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!),
-            SiteConfig(id: "s2", name: "Two", adapterID: "missing", url: URL(string: "https://y.com")!),
-            SiteConfig(id: "off", name: "Off", adapterID: "test", url: URL(string: "https://x.com")!, enabled: false),
+            SiteConfig(
+                id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!),
+            SiteConfig(
+                id: "s2", name: "Two", adapterID: "missing", url: URL(string: "https://y.com")!),
+            SiteConfig(
+                id: "off", name: "Off", adapterID: "test", url: URL(string: "https://x.com")!,
+                enabled: false),
         ])
 
         let results = await monitor.refresh(config: config)
-        XCTAssertEqual(results.map(\.siteID), ["s1", "s2"])           // enabled only, in order
+        XCTAssertEqual(results.map(\.siteID), ["s1", "s2"])  // enabled only, in order
         XCTAssertEqual(results[0].level, .major)
         XCTAssertEqual(results[0].detail, "Boom")
-        XCTAssertEqual(results[1].level, .unknown)                     // no adapter
+        XCTAssertEqual(results[1].level, .unknown)  // no adapter
     }
 
     func testNon2xxBecomesUnknown() async throws {
@@ -150,7 +156,7 @@ final class StatusMonitorTests: XCTestCase {
         let fetcher = StubFetcher(routes: [("x.com", Data("oops".utf8), 503)])
         let monitor = StatusMonitor(registry: registry, fetcher: fetcher)
         let config = AppConfiguration(sites: [
-            SiteConfig(id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!),
+            SiteConfig(id: "s1", name: "One", adapterID: "test", url: URL(string: "https://x.com")!)
         ])
         let results = await monitor.refresh(config: config)
         XCTAssertEqual(results[0].level, .unknown)
@@ -165,20 +171,23 @@ final class SiteConfigMigrationTests: XCTestCase {
     }
 
     func testLegacyKindMigratesToAdapterID() throws {
-        let sp = try decode(#"{"id":"gh","name":"GitHub","kind":"statuspage","url":"https://x.com"}"#)
+        let sp = try decode(
+            #"{"id":"gh","name":"GitHub","kind":"statuspage","url":"https://x.com"}"#)
         XCTAssertEqual(sp.adapterID, "statuspage")
         let aws = try decode(#"{"id":"aws","name":"AWS","kind":"awsHealth","url":"https://x.com"}"#)
         XCTAssertEqual(aws.adapterID, "aws")
     }
 
     func testAdapterIDFieldWins() throws {
-        let c = try decode(#"{"id":"x","name":"X","adapterID":"custom","url":"https://x.com","enabled":false}"#)
+        let c = try decode(
+            #"{"id":"x","name":"X","adapterID":"custom","url":"https://x.com","enabled":false}"#)
         XCTAssertEqual(c.adapterID, "custom")
         XCTAssertFalse(c.enabled)
     }
 
     func testRoundTripEncodesAdapterID() throws {
-        let original = SiteConfig(id: "x", name: "X", adapterID: "statuspage", url: URL(string: "https://x.com")!)
+        let original = SiteConfig(
+            id: "x", name: "X", adapterID: "statuspage", url: URL(string: "https://x.com")!)
         let data = try JSONEncoder().encode(original)
         XCTAssertTrue(String(data: data, encoding: .utf8)!.contains("\"adapterID\""))
         XCTAssertEqual(try JSONDecoder().decode(SiteConfig.self, from: data), original)
@@ -188,7 +197,8 @@ final class SiteConfigMigrationTests: XCTestCase {
 final class IssueCollapseTests: XCTestCase {
     func testSameTitleAcrossComponentsCollapsesToOne() {
         let issues = (1...16).map {
-            SiteIssue(component: "region-\($0)", title: "Project status change failures", level: .minor)
+            SiteIssue(
+                component: "region-\($0)", title: "Project status change failures", level: .minor)
         }
         let collapsed = issues.collapsed()
         XCTAssertEqual(collapsed.count, 1)
@@ -229,12 +239,12 @@ final class RelativeAgeTests: XCTestCase {
 final class IssueStartedAtTests: XCTestCase {
     func testAdapterParsesStartedAt() async throws {
         let script = """
-        globalThis.__STATUSBAR_ADAPTER__ = {
-          id: 't', name: 'T', endpoint: function(b){return b;},
-          parse: function(body){ return { level: 'major', detail: 'x',
-            issues: [{ title: 'boom', startedAt: '2026-07-09T04:34:24.849Z' }] }; }
-        };
-        """
+            globalThis.__STATUSBAR_ADAPTER__ = {
+              id: 't', name: 'T', endpoint: function(b){return b;},
+              parse: function(body){ return { level: 'major', detail: 'x',
+                issues: [{ title: 'boom', startedAt: '2026-07-09T04:34:24.849Z' }] }; }
+            };
+            """
         let adapter = try JSAdapter(script: script)
         let parsed = try await adapter.parse(body: "{}", baseURL: "x")
         XCTAssertNotNil(parsed.issues.first?.startedAt)

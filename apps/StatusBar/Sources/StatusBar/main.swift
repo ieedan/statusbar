@@ -11,7 +11,8 @@ if CommandLine.arguments.contains("--check") {
     let monitor = StatusMonitor(registry: registry)
 
     if registry.adapterIDs.isEmpty {
-        print("⚠️  No adapters loaded. Build them with `make adapters` or set STATUSBAR_ADAPTERS_DIR.")
+        print(
+            "⚠️  No adapters loaded. Build them with `make adapters` or set STATUSBAR_ADAPTERS_DIR.")
     }
 
     let done = DispatchSemaphore(value: 0)
@@ -30,7 +31,9 @@ if CommandLine.arguments.contains("--check") {
         }
         print("Overall: \(symbol(results.overallLevel)) \(results.overallLevel.rawValue)")
         for status in results {
-            print("  \(symbol(status.level)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(status.detail)")
+            print(
+                "  \(symbol(status.level)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(status.detail)"
+            )
             for issue in status.issues {
                 let age = issue.startedAt.map { " (started \(relativeAge($0)))" } ?? ""
                 print("       ↳ \(issue.summary)\(age)")

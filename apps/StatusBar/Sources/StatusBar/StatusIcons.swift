@@ -10,20 +10,20 @@ import StatusCore
 enum StatusIcons {
     static func color(for level: StatusLevel) -> NSColor {
         switch level {
-        case .major:       return .systemRed
-        case .minor:       return .systemOrange
+        case .major: return .systemRed
+        case .minor: return .systemOrange
         case .operational: return .systemGray
-        case .unknown:     return .tertiaryLabelColor
+        case .unknown: return .tertiaryLabelColor
         }
     }
 
     /// Short human label for a level, used in the menubar summary row.
     static func label(for level: StatusLevel) -> String {
         switch level {
-        case .major:       return "Major Outage"
-        case .minor:       return "Minor Issues"
+        case .major: return "Major Outage"
+        case .minor: return "Minor Issues"
         case .operational: return "All Systems Operational"
-        case .unknown:     return "Status Unknown"
+        case .unknown: return "Status Unknown"
         }
     }
 
@@ -60,8 +60,8 @@ enum StatusIcons {
     private static func path(for level: StatusLevel, in rect: NSRect) -> NSBezierPath {
         switch level {
         case .operational, .unknown: return circle(in: rect)
-        case .minor:                 return triangle(in: rect)
-        case .major:                 return roundedSquare(in: rect)
+        case .minor: return triangle(in: rect)
+        case .major: return roundedSquare(in: rect)
         }
     }
 

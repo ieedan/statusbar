@@ -36,7 +36,8 @@ public final class AdapterRegistry: Sendable {
     /// Where user-installed adapters live. A user can drop a single `.js` file
     /// (or an adapter folder) here — see `load`.
     public static var userAdaptersDirectory: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let support = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return support.appendingPathComponent("StatusBar/adapters", isDirectory: true)
     }
 
@@ -46,7 +47,9 @@ public final class AdapterRegistry: Sendable {
     /// 3. user-installed adapters in Application Support.
     public static func defaultSearchPaths() -> [URL] {
         var paths: [URL] = []
-        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("adapters", isDirectory: true) {
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent(
+            "adapters", isDirectory: true)
+        {
             paths.append(bundled)
         }
         if let env = ProcessInfo.processInfo.environment["STATUSBAR_ADAPTERS_DIR"] {
@@ -77,15 +80,19 @@ public final class AdapterRegistry: Sendable {
         }
 
         for base in searchPaths {
-            guard let entries = try? fm.contentsOfDirectory(
-                at: base, includingPropertiesForKeys: [.isDirectoryKey]) else { continue }
+            guard
+                let entries = try? fm.contentsOfDirectory(
+                    at: base, includingPropertiesForKeys: [.isDirectoryKey])
+            else { continue }
             for url in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                let isDirectory =
+                    (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
                 if isDirectory {
                     if let adapter = loadManifestAdapter(directory: url) { register(adapter) }
                 } else if url.pathExtension == "js" {
                     if let script = try? String(contentsOf: url, encoding: .utf8),
-                       let adapter = try? JSAdapter(script: script) {
+                        let adapter = try? JSAdapter(script: script)
+                    {
                         register(adapter)
                     }
                 }
@@ -98,7 +105,8 @@ public final class AdapterRegistry: Sendable {
     private static func loadManifestAdapter(directory: URL) -> JSAdapter? {
         let manifestURL = directory.appendingPathComponent("adapter.json")
         guard let mdata = try? Data(contentsOf: manifestURL),
-              let manifest = try? JSONDecoder().decode(Manifest.self, from: mdata) else { return nil }
+            let manifest = try? JSONDecoder().decode(Manifest.self, from: mdata)
+        else { return nil }
         let entryURL = directory.appendingPathComponent(manifest.entry)
         guard let script = try? String(contentsOf: entryURL, encoding: .utf8) else { return nil }
         return try? JSAdapter(script: script)

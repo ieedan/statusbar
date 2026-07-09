@@ -1,0 +1,158 @@
+name: Release
+
+# Changesets-driven release. On every push to `main`:
+#   1. `version` runs changesets/action. While changesets are pending it
+#      opens/updates a "Version Packages" PR (bumping package.json + writing
+#      CHANGELOG.md). Once that PR merges — no changesets left — the step no-ops
+#      and the gate below decides whether the freshly-bumped version needs
+#      releasing (i.e. isn't already tagged).
+#   2. `release` (only when there's a new, un-tagged version) builds the macOS
+#      app bundle, zips it, pushes the `v<version>` tag, and publishes a GitHub
+#      Release with the changelog notes and the zip attached.
+#
+# There is no npm publish — the app is private and shipped as a macOS binary.
+on:
+  push:
+    branches: [main]
+  # Manual re-run against the current main commit.
+  workflow_dispatch:
+
+# Don't let two pushes race the Version PR / a release.
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  # create/upload the GitHub Release and push the version tag
+  contents: write
+  # changesets/action opens the "Version Packages" PR
+  pull-requests: write
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history + tags so changesets can build changelogs and the
+          # release gate below can see existing version tags.
+          fetch-depth: 0
+          # changesets/action sets its own git credentials; leaving checkout's
+          # persisted http.extraheader in place causes "Duplicate header:
+          # Authorization" on push (actions/checkout#2299).
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # While changesets are pending, opens/updates the "Version Packages" PR.
+      # Once that PR merges (no changesets left) this no-ops — we don't publish
+      # to npm, so no `publish` command is given.
+      - name: Create Version PR
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset:version
+          commit: "chore(release): version"
+          title: "chore(release): version"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Runs only when there are no pending changesets — i.e. nothing to PR.
+      # That's either a routine push (version already tagged → skip) or a just
+      # -merged Version PR (new, un-tagged version → release).
+      - name: Decide whether to release
+        id: check
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION already tagged — nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$VERSION is not yet released — building"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Build & publish macOS app
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: macos-15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: adapters/pnpm-lock.yaml
+
+      - name: Show Swift version
+        run: swift --version
+
+      # Builds the release binary, compiles the adapters, and assembles
+      # "dist/Site Status.app" (see scripts/build-app.sh).
+      - name: Build app bundle
+        run: make app
+
+      - name: Zip app bundle
+        id: package
+        run: |
+          ASSET="Site-Status-${VERSION}-macos-arm64.zip"
+          # ditto produces a Finder-compatible archive that preserves the .app
+          # bundle structure and its ad-hoc code signature.
+          ditto -c -k --sequesterRsrc --keepParent "dist/Site Status.app" "$ASSET"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog notes
+        run: |
+          # Pull this version's section out of CHANGELOG.md (everything between
+          # "## <version>" and the next "## ") for the release body.
+          awk -v ver="## $VERSION" '
+            $0 == ver {flag=1; next}
+            /^## / && flag {exit}
+            flag {print}
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No changelog section for $VERSION — release will have no notes"
+          fi
+
+      - name: Tag and publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="v$VERSION"
+          # Tag the exact commit that was built (the run's triggering SHA).
+          git tag "$V" "${{ github.sha }}"
+          git push origin "$V"
+          TITLE="Site Status $V"
+          if [ -s release-notes.md ]; then
+            gh release create "$V" --title "$TITLE" --notes-file release-notes.md \
+              --latest "${{ steps.package.outputs.asset }}"
+          else
+            gh release create "$V" --title "$TITLE" --generate-notes \
+              --latest "${{ steps.package.outputs.asset }}"
+          fi

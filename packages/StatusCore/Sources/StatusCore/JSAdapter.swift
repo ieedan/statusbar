@@ -64,7 +64,8 @@ public actor JSAdapter {
         if let message = exceptions.message { throw AdapterError.scriptError(message) }
 
         guard let adapter = context.objectForKeyedSubscript("__STATUSBAR_ADAPTER__"),
-              !adapter.isUndefined, !adapter.isNull else {
+            !adapter.isUndefined, !adapter.isNull
+        else {
             throw AdapterError.noAdapterRegistered
         }
 
@@ -77,19 +78,22 @@ public actor JSAdapter {
         self.exceptions = exceptions
     }
 
-    private static func readSuggestedSites(from adapter: JSValue, adapterID: String) -> [SiteConfig] {
+    private static func readSuggestedSites(from adapter: JSValue, adapterID: String) -> [SiteConfig]
+    {
         guard let array = adapter.objectForKeyedSubscript("suggestedSites"),
-              array.isArray,
-              let count = array.objectForKeyedSubscript("length")?.toInt32() else {
+            array.isArray,
+            let count = array.objectForKeyedSubscript("length")?.toInt32()
+        else {
             return []
         }
         var sites: [SiteConfig] = []
         for i in 0..<Int(count) {
             guard let entry = array.atIndex(i),
-                  let sid = entry.objectForKeyedSubscript("id")?.toString(),
-                  let sname = entry.objectForKeyedSubscript("name")?.toString(),
-                  let surl = entry.objectForKeyedSubscript("url")?.toString(),
-                  let url = URL(string: surl) else { continue }
+                let sid = entry.objectForKeyedSubscript("id")?.toString(),
+                let sname = entry.objectForKeyedSubscript("name")?.toString(),
+                let surl = entry.objectForKeyedSubscript("url")?.toString(),
+                let url = URL(string: surl)
+            else { continue }
             sites.append(SiteConfig(id: sid, name: sname, adapterID: adapterID, url: url))
         }
         return sites
@@ -122,10 +126,12 @@ public actor JSAdapter {
         if let message = exceptions.message { throw AdapterError.callFailed(message) }
 
         // Marshal via JSON.stringify → Codable, which is robust across JS shapes.
-        guard let json = context.objectForKeyedSubscript("JSON")?
+        guard
+            let json = context.objectForKeyedSubscript("JSON")?
                 .objectForKeyedSubscript("stringify")?
                 .call(withArguments: [result])?.toString(),
-              let data = json.data(using: .utf8) else {
+            let data = json.data(using: .utf8)
+        else {
             throw AdapterError.callFailed("could not serialize parse result")
         }
         let raw = try JSONDecoder().decode(RawStatus.self, from: data)

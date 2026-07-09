@@ -39,7 +39,8 @@ public func decodeResponseBody(_ data: Data) -> String {
         let b0 = data[data.startIndex]
         let b1 = data[data.startIndex + 1]
         if (b0 == 0xFF && b1 == 0xFE) || (b0 == 0xFE && b1 == 0xFF),
-           let string = String(data: data, encoding: .utf16) {
+            let string = String(data: data, encoding: .utf16)
+        {
             return string
         }
     }

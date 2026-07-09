@@ -9,7 +9,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Site Status"
 EXECUTABLE="StatusBar"
 BUNDLE_ID="dev.statusbar.SiteStatus"
-VERSION="0.1.0"
+# Single source of truth: the version changesets bumps in package.json.
+VERSION="$(node -p "require('$ROOT/package.json').version")"
 
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
