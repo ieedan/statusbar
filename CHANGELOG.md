@@ -1,5 +1,15 @@
 # statusbar
 
+## 0.2.0
+
+### Minor Changes
+
+- [`591e021`](https://github.com/ieedan/statusbar/commit/591e021f96f722ef5764032e37ae6ffb2b0aa1fd) Thanks [@ieedan](https://github.com/ieedan)! - Demote lingering low-impact issues that have gone quiet. Non-major issues whose source hasn't posted an update within a configurable window (`staleIssueThresholdHours`, default 72h) are moved into a per-site "low-priority" submenu and no longer drive the menubar icon, so a weeks-old minor incident stops keeping the icon lit. Threaded incident `updatedAt` through the adapter SDK, the Statuspage adapter, and the core models to detect staleness; toggle with the new `demoteStaleIssues` config option.
+
+### Patch Changes
+
+- [`ba18d68`](https://github.com/ieedan/statusbar/commit/ba18d68713d556e39808b7e5c0d1408f0ac62fca) Thanks [@ieedan](https://github.com/ieedan)! - Render the menubar status icon as a template image so macOS tints it to match the menubar's text color (white on dark, black on light), matching the other menubar items instead of showing as a colored shape. Severity is still legible from the icon's shape. The colored icons in the dropdown menu are unchanged.
+
 ## 0.1.2
 
 ### Patch Changes
