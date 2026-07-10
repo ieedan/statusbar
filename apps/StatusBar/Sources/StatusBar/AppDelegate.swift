@@ -107,22 +107,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(loading)
         } else {
             for status in results {
-                // The site row stays honest to what the source reports — a green
-                // dot next to "Minor Service Outage" would contradict itself. The
-                // demotion instead shows up as the issue moving into the submenu,
-                // and in the *menubar* icon settling back to green (see `render`).
-                let fullTitle = "\(status.name) — \(status.detail)"
+                // The row reflects the site's *effective* level — the same
+                // stale-demotion the menubar badge uses — so the row icon always
+                // agrees with the badge above, and the site actually driving the
+                // badge is the one that looks lit. When demotion changes the level
+                // (every issue has gone stale, or a lingering incident is demoted
+                // below the source's own wording), the source detail string no
+                // longer matches the icon, so we fall back to a level-derived
+                // label to keep icon and text consistent.
+                let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
+                let effective = status.effectiveLevel(threshold: threshold, now: now)
+                let detail = effective == status.level
+                    ? status.detail : StatusIcons.label(for: effective)
+                let fullTitle = "\(status.name) — \(detail)"
                 let item = NSMenuItem(
                     title: Self.truncated(fullTitle),
                     action: #selector(openSite(_:)),
                     keyEquivalent: "")
                 item.target = self
-                item.image = StatusIcons.shape(for: status.level)
+                item.image = StatusIcons.shape(for: effective)
                 item.representedObject = status.pageURL
                 item.toolTip = fullTitle
                 menu.addItem(item)
-
-                let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
 
                 // Indented detail line per active issue affecting this site,
                 // capped so a single busy service can't dominate the menu.

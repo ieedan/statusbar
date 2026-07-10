@@ -75,7 +75,15 @@ export default defineAdapter({
     // Active incidents are the primary signal — one line per affected component.
     for (const incident of data.incidents ?? []) {
       if (incident.status === "resolved") continue;
-      const lvl = levelForIndicator(incident.impact ?? "");
+      let lvl = levelForIndicator(incident.impact ?? "");
+      // A "monitoring" incident has had its fix deployed and is only being
+      // watched for recurrence — the site's own top-level indicator has usually
+      // already returned to green. Cap it at "minor" so a recovering outage
+      // doesn't keep the overall status pinned at "major" after the impact is
+      // effectively over. The incident still shows in the menu, just demoted.
+      if (incident.status === "monitoring" && lvl === "major") {
+        lvl = "minor";
+      }
       const startedAt = incident.started_at ?? incident.created_at;
       const updatedAt = incident.updated_at;
       const affected = incident.components ?? [];

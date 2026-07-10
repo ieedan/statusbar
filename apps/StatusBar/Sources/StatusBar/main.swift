@@ -37,11 +37,15 @@ if CommandLine.arguments.contains("--check") {
         let overall = results.overallLevel(threshold: threshold, now: now)
         print("Overall: \(symbol(overall)) \(overall.rawValue)")
         for status in results {
-            // Per-site row mirrors the menu: honest to the source's own level.
-            print(
-                "  \(symbol(status.level)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(status.detail)"
-            )
+            // Per-site row mirrors the menu: the *effective* level after stale
+            // demotion, with a level-derived label when that no longer matches
+            // the source's own wording.
             let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
+            let effective = status.effectiveLevel(threshold: threshold, now: now)
+            let detail = effective == status.level ? status.detail : StatusIcons.label(for: effective)
+            print(
+                "  \(symbol(effective)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(detail)"
+            )
             for issue in fresh {
                 let age = issue.startedAt.map { " (started \(relativeAge($0)))" } ?? ""
                 print("       ↳ \(issue.summary)\(age)")
