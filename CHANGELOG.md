@@ -1,5 +1,13 @@
 # statusbar
 
+## 0.2.1
+
+### Patch Changes
+
+- [`362c5d5`](https://github.com/ieedan/statusbar/commit/362c5d5e738e9a91e279530e581d600bfb084d3b) Thanks [@ieedan](https://github.com/ieedan)! - fix: show correct color for status
+
+- [`b5dbc3d`](https://github.com/ieedan/statusbar/commit/b5dbc3d49f9042025ec59375bc2eb7a17c59c28b) Thanks [@ieedan](https://github.com/ieedan)! - fix: better handle overall status and site statuses
+
 ## 0.2.0
 
 ### Minor Changes
