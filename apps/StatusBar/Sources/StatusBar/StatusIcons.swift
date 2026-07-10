@@ -27,15 +27,20 @@ enum StatusIcons {
         }
     }
 
-    /// The shape image for a level. `filled` draws a solid glyph (used in the
-    /// menubar for visibility); otherwise it's a stroked outline (used in the
-    /// menu, matching the design).
+    /// The menubar glyph for a level. When nothing is wrong the image is a
+    /// template, so the menubar tints it to match its own text color and the icon
+    /// blends in with its neighbors. Once a site degrades the image keeps its own
+    /// color, so the severity is visible without opening the menu.
+    static func menubarShape(for level: StatusLevel) -> NSImage {
+        let blendsIn = level == .operational || level == .unknown
+        return shape(for: level, size: 15, template: blendsIn)
+    }
+
+    /// The shape image for a level. `filled` draws a solid glyph; otherwise it's
+    /// a stroked outline (used in the menu, matching the design).
     ///
-    /// `template` returns a template image, which the menubar tints to match its
-    /// own text color (white on dark, black on light) so the icon blends in with
-    /// the other menubar items instead of showing as a colored blob. Severity is
-    /// still legible from the shape alone (see the type doc comment), so dropping
-    /// color in the menubar is consistent with the design.
+    /// `template` returns a template image, whose color is discarded in favor of
+    /// the tint applied by whatever draws it.
     static func shape(for level: StatusLevel, filled: Bool = false, size: CGFloat = 13, template: Bool = false) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let path = Self.path(for: level, in: rect.insetBy(dx: 1.5, dy: 1.5))
