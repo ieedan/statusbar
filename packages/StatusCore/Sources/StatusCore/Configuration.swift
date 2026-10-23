@@ -34,7 +34,8 @@ public struct AppConfiguration: Codable, Sendable, Equatable {
     /// load, falling back to the defaults for any missing key.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        refreshIntervalSeconds = try c.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 60
+        refreshIntervalSeconds =
+            try c.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 60
         sites = try c.decodeIfPresent([SiteConfig].self, forKey: .sites) ?? []
         demoteStaleIssues = try c.decodeIfPresent(Bool.self, forKey: .demoteStaleIssues) ?? true
         staleIssueThresholdHours =

@@ -211,7 +211,9 @@ public extension SiteStatus {
     /// Splits this site's issues into the ones worth surfacing now (`fresh`) and
     /// the lingering low-impact ones that have gone quiet (`stale`). Order within
     /// each group is preserved.
-    func partitionedIssues(threshold: TimeInterval, now: Date) -> (fresh: [SiteIssue], stale: [SiteIssue]) {
+    func partitionedIssues(threshold: TimeInterval, now: Date) -> (
+        fresh: [SiteIssue], stale: [SiteIssue]
+    ) {
         var fresh: [SiteIssue] = []
         var stale: [SiteIssue] = []
         for issue in issues {

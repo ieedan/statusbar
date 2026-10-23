@@ -122,7 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // label to keep icon and text consistent.
                 let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
                 let effective = status.effectiveLevel(threshold: threshold, now: now)
-                let detail = effective == status.level
+                let detail =
+                    effective == status.level
                     ? status.detail : StatusIcons.label(for: effective)
                 let fullTitle = "\(status.name) — \(detail)"
                 let item = NSMenuItem(
@@ -154,7 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Lingering low-impact issues that have gone quiet are tucked into
                 // a submenu so they stay reachable without cluttering the site.
                 if !stale.isEmpty {
-                    let label = stale.count == 1
+                    let label =
+                        stale.count == 1
                         ? "1 low-priority issue…" : "\(stale.count) low-priority issues…"
                     let staleItem = NSMenuItem(title: label, action: nil, keyEquivalent: "")
                     staleItem.indentationLevel = 2

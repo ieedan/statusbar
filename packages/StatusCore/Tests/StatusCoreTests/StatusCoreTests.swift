@@ -306,7 +306,8 @@ final class IssueStalenessTests: XCTestCase {
         // Old start, but a recent update means it's still active → not stale.
         let old = now.addingTimeInterval(-24 * 21 * 3600)
         let recent = now.addingTimeInterval(-3600)
-        let i = SiteIssue(component: nil, title: "t", level: .minor, startedAt: old, updatedAt: recent)
+        let i = SiteIssue(
+            component: nil, title: "t", level: .minor, startedAt: old, updatedAt: recent)
         XCTAssertFalse(i.isStale(threshold: threshold, now: now))
     }
 
@@ -315,7 +316,8 @@ final class IssueStalenessTests: XCTestCase {
         let newer = Date(timeIntervalSince1970: 900)
         let issues = [
             SiteIssue(component: "A", title: "Same", level: .minor, startedAt: old, updatedAt: old),
-            SiteIssue(component: "B", title: "Same", level: .minor, startedAt: old, updatedAt: newer),
+            SiteIssue(
+                component: "B", title: "Same", level: .minor, startedAt: old, updatedAt: newer),
         ]
         XCTAssertEqual(issues.collapsed().first?.updatedAt, newer)
     }
@@ -352,7 +354,8 @@ final class IssueStalenessTests: XCTestCase {
     func testOverallLevelIgnoresStaleLowImpact() {
         let staleSite = siteWith([issue(.minor, ageHours: 24 * 21)], level: .minor)
         let goodSite = siteWith([], level: .operational)
-        XCTAssertEqual([staleSite, goodSite].overallLevel(threshold: threshold, now: now), .operational)
+        XCTAssertEqual(
+            [staleSite, goodSite].overallLevel(threshold: threshold, now: now), .operational)
     }
 }
 
