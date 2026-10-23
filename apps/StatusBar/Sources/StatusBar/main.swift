@@ -42,7 +42,8 @@ if CommandLine.arguments.contains("--check") {
             // the source's own wording.
             let (fresh, stale) = status.partitionedIssues(threshold: threshold, now: now)
             let effective = status.effectiveLevel(threshold: threshold, now: now)
-            let detail = effective == status.level ? status.detail : StatusIcons.label(for: effective)
+            let detail =
+                effective == status.level ? status.detail : StatusIcons.label(for: effective)
             print(
                 "  \(symbol(effective)) \(status.name.padding(toLength: 12, withPad: " ", startingAt: 0)) \(detail)"
             )

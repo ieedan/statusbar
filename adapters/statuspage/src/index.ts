@@ -4,13 +4,19 @@ import {
   type StatusLevel,
 } from "@statusbar/adapter-sdk";
 
-/** Statuspage `indicator`/incident `impact` → normalized level. */
+/**
+ * Statuspage `indicator`/incident `impact` → normalized level.
+ *
+ * Maintenance is planned work the operator scheduled, not something going
+ * wrong, so it maps to `operational`: it still gets listed as an issue, but it
+ * doesn't light the menubar. Only unplanned trouble earns a warning.
+ */
 function levelForIndicator(indicator: string): StatusLevel {
   switch (indicator.toLowerCase()) {
     case "none":
+    case "maintenance":
       return "operational";
     case "minor":
-    case "maintenance":
       return "minor";
     case "major":
     case "critical":
@@ -20,13 +26,14 @@ function levelForIndicator(indicator: string): StatusLevel {
   }
 }
 
-/** Statuspage component `status` → normalized level. */
+/** Statuspage component `status` → normalized level. See `levelForIndicator`
+ *  for why `under_maintenance` is not a warning. */
 function levelForComponent(status: string): StatusLevel {
   switch (status.toLowerCase()) {
     case "operational":
+    case "under_maintenance":
       return "operational";
     case "degraded_performance":
-    case "under_maintenance":
     case "partial_outage":
       return "minor";
     case "major_outage":
@@ -44,6 +51,19 @@ function humanize(token: string): string {
     .join(" ");
 }
 
+interface Component {
+  id?: string;
+  name: string;
+  status?: string;
+  /** Last time Statuspage touched this component — in practice, when its
+   *  status last changed. Absent on some hand-rolled implementations. */
+  updated_at?: string;
+  /** True for a *group* header, whose status is a rollup of its children. */
+  group?: boolean;
+  /** Set on a child to the id of the group it belongs to. */
+  group_id?: string | null;
+}
+
 interface Summary {
   status?: { indicator?: string; description?: string };
   incidents?: Array<{
@@ -55,7 +75,7 @@ interface Summary {
     updated_at?: string;
     components?: Array<{ name: string; status?: string }>;
   }>;
-  components?: Array<{ name: string; status?: string }>;
+  components?: Component[];
 }
 
 export default defineAdapter({
@@ -104,12 +124,32 @@ export default defineAdapter({
 
     // Fall back to degraded components so a non-green status always explains itself.
     if (issues.length === 0) {
-      for (const component of data.components ?? []) {
+      const components = data.components ?? [];
+      // A group header's status is just a rollup of its children, and
+      // summary.json lists the children too — so emitting the group as well
+      // reports the same degradation twice ("Africa" plus each of its cities).
+      // Keep the leaves, which name what is actually degraded.
+      const parents = new Set(
+        components.map((c) => c.group_id).filter((id): id is string => !!id),
+      );
+      for (const component of components) {
+        if (component.group && component.id && parents.has(component.id)) {
+          continue;
+        }
         if (component.status && component.status !== "operational") {
           issues.push({
             component: component.name,
             title: humanize(component.status),
             level: levelForComponent(component.status),
+            // Pass the component's own timestamp through so these get aged like
+            // any other issue. Large pages list standing infrastructure —
+            // Cloudflare publishes ~340 edge locations, a handful of which are
+            // always rerouted or under maintenance — and without a timestamp
+            // that permanent background noise reads as a live outage forever.
+            // With one, the app demotes anything quiet for days into the
+            // low-priority submenu, which is how Cloudflare's own page now
+            // reports it: "All systems operational", locations listed apart.
+            updatedAt: component.updated_at,
           });
         }
       }
@@ -135,6 +175,7 @@ export default defineAdapter({
     },
     { id: "supabase", name: "Supabase", url: "https://status.supabase.com" },
     { id: "convex", name: "Convex", url: "https://status.convex.dev" },
+    { id: "cursor", name: "Cursor", url: "https://status.cursor.com" },
     { id: "discord", name: "Discord", url: "https://discordstatus.com" },
   ],
 });

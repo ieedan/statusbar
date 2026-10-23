@@ -41,7 +41,9 @@ enum StatusIcons {
     ///
     /// `template` returns a template image, whose color is discarded in favor of
     /// the tint applied by whatever draws it.
-    static func shape(for level: StatusLevel, filled: Bool = false, size: CGFloat = 13, template: Bool = false) -> NSImage {
+    static func shape(
+        for level: StatusLevel, filled: Bool = false, size: CGFloat = 13, template: Bool = false
+    ) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let path = Self.path(for: level, in: rect.insetBy(dx: 1.5, dy: 1.5))
             let color = Self.color(for: level)

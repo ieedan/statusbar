@@ -3,3 +3,6 @@ packages:
   - statuspage
   - aws
   - gcp
+
+allowBuilds:
+  esbuild: true
