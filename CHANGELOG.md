@@ -1,5 +1,40 @@
 # statusbar
 
+## 0.2.2
+
+### Patch Changes
+
+- [#5](https://github.com/ieedan/statusbar/pull/5) [`f024e39`](https://github.com/ieedan/statusbar/commit/f024e39236388bbef20b2f3aa44067ebff1722ef) Thanks [@ieedan](https://github.com/ieedan)! - fix: scheduled maintenance no longer lights the menubar
+
+  A Statuspage component sitting in `under_maintenance` — or a page whose overall
+  indicator is `maintenance` — mapped to `minor`, so planned work turned the
+  menubar icon into a warning triangle. Maintenance is work the operator scheduled,
+  not something going wrong, so it now maps to `operational`: it's still listed
+  under the site so you can see it's happening, but only unplanned trouble raises
+  the icon. A maintenance window alongside a real degradation still warns, on the
+  strength of the degradation.
+
+- [#5](https://github.com/ieedan/statusbar/pull/5) [`f024e39`](https://github.com/ieedan/statusbar/commit/f024e39236388bbef20b2f3aa44067ebff1722ef) Thanks [@ieedan](https://github.com/ieedan)! - fix: stop large Statuspage sites reading as a permanent outage
+
+  Cloudflare's rebuilt status page reports "All systems operational" while the
+  Statuspage API it still serves rolls its ~340 edge locations into the top-level
+  indicator — a handful are always rerouted or under maintenance, so the site (and
+  with it the menubar icon) sat on orange indefinitely, explained only by two
+  useless rows reading "Partial Outage" and "Under Maintenance".
+
+  The Statuspage adapter now passes each component's `updated_at` through as the
+  issue's `updatedAt`, so degraded components are aged like every other issue and
+  standing infrastructure noise is demoted into the low-priority submenu instead of
+  driving the icon. A component that degrades now still surfaces immediately.
+
+  It also skips component _group_ headers whose children are in the same payload —
+  a group's status is a rollup of those children, so emitting both reported the
+  same degradation twice ("Africa" alongside each of its cities).
+
+- [#5](https://github.com/ieedan/statusbar/pull/5) [`172e871`](https://github.com/ieedan/statusbar/commit/172e87129fad35a73b6d8715bd671fa4ecafba6f) Thanks [@ieedan](https://github.com/ieedan)! - chore: sign and notarize release builds
+
+  Releases are now signed with a Developer ID certificate and notarized by Apple, so the app opens without the `xattr -cr` workaround.
+
 ## 0.2.1
 
 ### Patch Changes
