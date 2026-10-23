@@ -7,8 +7,9 @@ name: Release
 #      and the gate below decides whether the freshly-bumped version needs
 #      releasing (i.e. isn't already tagged).
 #   2. `release` (only when there's a new, un-tagged version) builds the macOS
-#      app bundle, zips it, pushes the `v<version>` tag, and publishes a GitHub
-#      Release with the changelog notes and the zip attached.
+#      app bundle, wraps it in a drag-to-Applications .dmg, pushes the
+#      `v<version>` tag, and publishes a GitHub Release with the changelog notes
+#      and the .dmg attached.
 #
 # There is no npm publish — the app is private and shipped as a macOS binary.
 on:
@@ -124,6 +125,11 @@ jobs:
       # cert + notarization, Gatekeeper opens the app cleanly; without it, the
       # ad-hoc-signed build still ships (users get the "unidentified developer"
       # prompt). MAC_CSC_LINK must never be exported empty, so we branch on it.
+      #
+      # The shipped asset is a drag-to-Applications .dmg. When signing, both the
+      # app and the .dmg are notarized and stapled: the app so its ticket
+      # survives being dragged out of the image, the .dmg so it opens cleanly
+      # straight after download.
       - name: Sign, notarize & package
         id: package
         env:
@@ -137,7 +143,21 @@ jobs:
         run: |
           set -euo pipefail
           APP="dist/StatusBar.app"
-          ASSET="StatusBar-${VERSION}-macos-arm64.zip"
+          ASSET="StatusBar-${VERSION}-macos-arm64.dmg"
+          DMG="dist/$ASSET"
+
+          # Submit a file to Apple and fail unless it comes back Accepted
+          # (notarytool can exit 0 on a rejected submission).
+          notarize() {
+            local out
+            out="$(xcrun notarytool submit "$1" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait 2>&1)"
+            echo "$out"
+            echo "$out" | grep -q "status: Accepted" || { echo "::error::Notarization of $1 was not accepted"; exit 1; }
+          }
 
           if [ -n "$MAC_CSC_LINK" ]; then
             echo "› Developer ID cert present — signing + notarizing"
@@ -168,27 +188,27 @@ jobs:
               --sign "$IDENTITY" --keychain "$KEYCHAIN" "$APP"
             codesign --verify --strict --verbose=2 "$APP"
 
-            # notarytool takes a zip of the bundle.
-            ditto -c -k --sequesterRsrc --keepParent "$APP" "$ASSET"
-            xcrun notarytool submit "$ASSET" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
-
-            # Staple the ticket onto the app, then re-zip so the shipped archive
-            # carries it (Gatekeeper reads it offline on first launch).
+            # notarytool takes a zip of the bundle; this one is only for
+            # submission, it is not shipped.
+            SUBMIT_ZIP="$RUNNER_TEMP/StatusBar-notarize.zip"
+            ditto -c -k --sequesterRsrc --keepParent "$APP" "$SUBMIT_ZIP"
+            notarize "$SUBMIT_ZIP"
             xcrun stapler staple "$APP"
-            rm -f "$ASSET"
-            ditto -c -k --sequesterRsrc --keepParent "$APP" "$ASSET"
+
+            # Build the image from the stapled app, then sign + notarize it too.
+            ./scripts/build-dmg.sh "$APP" "$DMG"
+            codesign --force --timestamp --sign "$IDENTITY" --keychain "$KEYCHAIN" "$DMG"
+            notarize "$DMG"
+            xcrun stapler staple "$DMG"
+            xcrun stapler validate "$DMG"
 
             security delete-keychain "$KEYCHAIN"
           else
             echo "› No MAC_CSC_LINK secret — shipping the unsigned (ad-hoc) build"
-            ditto -c -k --sequesterRsrc --keepParent "$APP" "$ASSET"
+            ./scripts/build-dmg.sh "$APP" "$DMG"
           fi
 
-          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+          echo "asset=$DMG" >> "$GITHUB_OUTPUT"
 
       - name: Extract changelog notes
         run: |
