@@ -36,6 +36,10 @@ for dir in "$ROOT"/adapters/*/; do
   cp -R "$dir/dist" "$CONTENTS/Resources/adapters/$id/dist"
 done
 
+echo "› Bundling app icon…"
+# Rendered by scripts/make-icon.swift; re-run it after changing the design.
+cp "$ROOT/assets/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
+
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -45,6 +49,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key>     <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>      <string>$BUNDLE_ID</string>
     <key>CFBundleExecutable</key>      <string>$EXECUTABLE</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleVersion</key>         <string>$VERSION</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>

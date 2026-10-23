@@ -6,8 +6,8 @@ See if any of the services you use every day are down, live in your status bar.
 
 ## Install
 
-1. Download the latest `StatusBar-<version>-macos-arm64.zip` from the [Releases](https://github.com/ieedan/status-bar/releases) page.
-2. Unzip it and move `StatusBar.app` into `/Applications`, then open it. Releases are signed with a Developer ID certificate and notarized by Apple, so Gatekeeper opens it without any extra steps.
+1. Download the latest `StatusBar-<version>-macos-arm64.dmg` from the [Releases](https://github.com/ieedan/statusbar/releases) page.
+2. Open it and drag `StatusBar.app` onto the `Applications` shortcut, then open it from there. Releases are signed with a Developer ID certificate and notarized by Apple, so Gatekeeper opens it without any extra steps.
 
 ## Adding other sites
 

@@ -1,4 +1,4 @@
-.PHONY: adapters build run check test app install clean
+.PHONY: adapters build run check test app dmg install clean
 
 # Build the TypeScript adapters to JS.
 adapters:
@@ -24,6 +24,10 @@ test:
 # Package a distributable StatusBar.app (with bundled adapters) into dist/.
 app:
 	./scripts/build-app.sh
+
+# Wrap dist/StatusBar.app in a drag-to-Applications disk image (unsigned).
+dmg: app
+	./scripts/build-dmg.sh "dist/StatusBar.app" "dist/StatusBar.dmg"
 
 # Build and install the app into /Applications.
 install: app

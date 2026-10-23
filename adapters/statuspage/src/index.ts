@@ -43,6 +43,10 @@ function levelForComponent(status: string): StatusLevel {
   }
 }
 
+/** Pages listing at least this many components (see `parse`) are too large for
+ *  per-component statuses to mean "something is down" without an incident. */
+const NOISY_PAGE_COMPONENTS = 100;
+
 /** "partial_outage" → "Partial Outage" */
 function humanize(token: string): string {
   return token
@@ -87,10 +91,12 @@ export default defineAdapter({
 
   parse: (body) => {
     const data = JSON.parse(body) as Summary;
-    const level = levelForIndicator(data.status?.indicator ?? "");
-    const detail = data.status?.description ?? "Unknown";
+    const reportedLevel = levelForIndicator(data.status?.indicator ?? "");
+    const reportedDetail = data.status?.description ?? "Unknown";
 
     const issues: AdapterIssue[] = [];
+    let level = reportedLevel;
+    let detail = reportedDetail;
 
     // Active incidents are the primary signal — one line per affected component.
     for (const incident of data.incidents ?? []) {
@@ -132,6 +138,37 @@ export default defineAdapter({
       const parents = new Set(
         components.map((c) => c.group_id).filter((id): id is string => !!id),
       );
+      const leaves = components.filter(
+        (c) => !(c.group && c.id && parents.has(c.id)),
+      );
+
+      // Huge pages are a different animal. Cloudflare lists ~340 edge
+      // locations next to its ~130 real services; a few dozen sit in
+      // `major_outage` or `degraded_performance` at any moment, some for
+      // months, and Statuspage rolls them all into the top-level indicator —
+      // so the site reads "Partial System Outage" while Cloudflare's own page
+      // says "No known service issues". With no active incident, statuses from
+      // a list that long are standing infrastructure noise, not an outage (a
+      // real one gets an incident). So they only get summarised, at
+      // `operational`, and don't set the site's level.
+      if (leaves.length >= NOISY_PAGE_COMPONENTS) {
+        const affected = leaves.filter(
+          (c) =>
+            c.status &&
+            c.status !== "operational" &&
+            c.status !== "under_maintenance",
+        );
+        level = "operational";
+        detail = "All Systems Operational";
+        if (affected.length > 0) {
+          issues.push({
+            title: `${affected.length} of ${leaves.length} components not fully operational`,
+            level: "operational",
+          });
+        }
+        return { level, detail, issues };
+      }
+
       for (const component of components) {
         if (component.group && component.id && parents.has(component.id)) {
           continue;
