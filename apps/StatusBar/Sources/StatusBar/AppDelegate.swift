@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isRefreshing = false
     private var refreshTimer: Timer?
     private var settingsController: SettingsWindowController?
+    private var configWatcher: FileWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -34,6 +35,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.configStore = store
             self.config = store.loadOrCreateDefault()
             self.monitor = StatusMonitor(registry: registry)
+
+            self.configWatcher = FileWatcher(url: store.fileURL) { [weak self] in
+                self?.applyExternalConfigChange()
+            }
 
             self.scheduleTimer()
             self.refresh()
@@ -223,6 +228,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyConfigChange() {
         guard let configStore else { return }
         config = configStore.loadOrCreateDefault()
+        scheduleTimer()
+        refresh()
+    }
+
+    /// Called when config.json changes on disk behind the app's back — a
+    /// hand-edit in an editor, or a script writing the file. Unlike the menu's
+    /// "Reload Config & Refresh" this is deliberately silent: a file caught
+    /// mid-write, or mid-typo while someone edits it, is transiently invalid,
+    /// and an alert per keystroke would be unusable. We keep the config we have
+    /// and wait for the next write to land.
+    private func applyExternalConfigChange() {
+        guard let configStore, let fresh = try? configStore.load() else { return }
+        // The app's own saves trip the watcher too. Comparing makes a self-write
+        // a no-op rather than a second, redundant round of network checks.
+        guard fresh != config else { return }
+        config = fresh
+        settingsController?.reload()
         scheduleTimer()
         refresh()
     }

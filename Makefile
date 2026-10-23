@@ -21,14 +21,14 @@ check: adapters
 test:
 	cd packages/StatusCore && swift test
 
-# Package a distributable Site Status.app (with bundled adapters) into dist/.
+# Package a distributable StatusBar.app (with bundled adapters) into dist/.
 app:
 	./scripts/build-app.sh
 
 # Build and install the app into /Applications.
 install: app
-	rm -rf "/Applications/Site Status.app"
-	cp -R "dist/Site Status.app" "/Applications/Site Status.app"
+	rm -rf "/Applications/StatusBar.app"
+	cp -R "dist/StatusBar.app" "/Applications/StatusBar.app"
 	@echo "Installed to /Applications. Enable 'Launch at login' from Settings (⌘,)."
 
 clean:

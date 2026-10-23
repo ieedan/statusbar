@@ -115,8 +115,7 @@ public struct SiteIssue: Sendable, Equatable, Identifiable {
 
     /// The most recent time we have evidence this issue was active: the last
     /// source update if available, otherwise its start. `nil` when the source
-    /// reports neither (e.g. a degraded-component fallback), which we treat as a
-    /// present condition — never stale.
+    /// reports neither, which we treat as a present condition — never stale.
     public var lastActivity: Date? { updatedAt ?? startedAt }
 
     /// Whether this issue is stale: low-impact *and* quiet for longer than

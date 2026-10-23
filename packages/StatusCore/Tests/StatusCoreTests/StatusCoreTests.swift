@@ -298,7 +298,7 @@ final class IssueStalenessTests: XCTestCase {
     }
 
     func testNoTimestampIsNeverStale() {
-        // A degraded-component fallback with no time reported is a present condition.
+        // An issue whose source reports no time at all is a present condition.
         XCTAssertFalse(issue(.minor, ageHours: nil).isStale(threshold: threshold, now: now))
     }
 
