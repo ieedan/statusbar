@@ -1,5 +1,23 @@
 # statusbar
 
+## 0.2.3
+
+### Patch Changes
+
+- [#7](https://github.com/ieedan/statusbar/pull/7) [`2fd9e08`](https://github.com/ieedan/statusbar/commit/2fd9e08b8eca29ad5a1208e5f78ca21b529b72ab) Thanks [@ieedan](https://github.com/ieedan)! - feat: add an app icon
+
+  StatusBar now has a proper icon in Finder, the Dock and the installer: the three status shapes (circle, triangle and rounded square) overlapped along a diagonal on a light tile. It's rendered by `scripts/make-icon.swift` into `assets/AppIcon.icns`.
+
+- [#7](https://github.com/ieedan/statusbar/pull/7) [`53a35c6`](https://github.com/ieedan/statusbar/commit/53a35c6fc3309e95b4c3caea6ada8ba5611c487b) Thanks [@ieedan](https://github.com/ieedan)! - fix: stop huge Statuspage sites reading as an outage when nothing is down
+
+  Cloudflare lists ~340 edge locations beside its ~130 services, and a few dozen are always in `major_outage` or `degraded_performance`. Statuspage rolls those into the top-level indicator, so the menubar showed "Partial System Outage" while Cloudflare's own page said "No known service issues". Aging the issues couldn't fix it: major outages never age out, and plenty of locations had changed state within the last 72 hours.
+
+  With no active incident, a page listing 100 or more components now reads operational, and its non-operational components are summarised in a single informational row instead of setting the site's level. Active incidents still drive the level exactly as before, and smaller pages are unchanged.
+
+- [#7](https://github.com/ieedan/statusbar/pull/7) [`4ab2b31`](https://github.com/ieedan/statusbar/commit/4ab2b31068b0f7954344818a2a8c651300065ef7) Thanks [@ieedan](https://github.com/ieedan)! - chore: ship releases as a drag-to-Applications .dmg
+
+  Releases are now a signed, notarized disk image instead of a zipped app, so installing is "open it, drag StatusBar onto Applications". Both the app and the .dmg are notarized and stapled.
+
 ## 0.2.2
 
 ### Patch Changes
