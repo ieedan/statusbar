@@ -7,14 +7,7 @@ See if any of the services you use every day are down, live in your status bar.
 ## Install
 
 1. Download the latest `StatusBar-<version>-macos-arm64.zip` from the [Releases](https://github.com/ieedan/status-bar/releases) page.
-2. Unzip it and move `StatusBar.app` into `/Applications` **before** the next step. The command below points at `/Applications/StatusBar.app`, so if the app is still in `Downloads` you'll get `xattr: No such file`.
-3. Because I'm not forking over $100 a year to apple right now the app isn't signed. So just run this to take it out of quarantine and everything will work.
-
-   ```sh
-   xattr -cr "/Applications/StatusBar.app"
-   ```
-
-   > You will need to do this for every new release
+2. Unzip it and move `StatusBar.app` into `/Applications`, then open it. Releases are signed with a Developer ID certificate and notarized by Apple, so Gatekeeper opens it without any extra steps.
 
 ## Adding other sites
 
@@ -25,4 +18,21 @@ service** (or **Add Custom…** for any Atlassian Statuspage site).
 If you want your agent to do this part for you, just add the /add-site skill and tell your agent:
 ```
 /add-site Add "GitLab" to my statusbar
+```
+
+## Development
+
+```sh
+pnpm install
+pnpm setup:dev
+```
+
+This installs the adapter dependencies and builds everything. Then `make run` starts the app.
+
+## Releasing
+
+Releases are signed and notarized by CI. Run this once to set the Apple secrets on the GitHub repo:
+
+```sh
+pnpm setup:prod
 ```
