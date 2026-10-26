@@ -75,3 +75,12 @@ jobs:
       - name: Test StatusCore
         working-directory: packages/StatusCore
         run: swift test
+
+      # Exercises dmgbuild + the .dmg layout on the runner's Python, so a problem
+      # here shows up on the PR instead of in the release job. A stub bundle is
+      # enough — this checks the packaging, not the app.
+      - name: Build installer image
+        run: |
+          mkdir -p "$RUNNER_TEMP/Stub.app/Contents/MacOS"
+          ./scripts/build-dmg.sh "$RUNNER_TEMP/Stub.app" "$RUNNER_TEMP/Stub.dmg"
+          hdiutil verify "$RUNNER_TEMP/Stub.dmg"
