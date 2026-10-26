@@ -1,5 +1,13 @@
 # statusbar
 
+## 0.2.4
+
+### Patch Changes
+
+- [#9](https://github.com/ieedan/statusbar/pull/9) [`6573e85`](https://github.com/ieedan/statusbar/commit/6573e850d83e7bc394e506a2d5fd2f42ea232f14) Thanks [@ieedan](https://github.com/ieedan)! - chore: give the installer the usual drag-to-Applications layout
+
+  The .dmg now opens as a fixed-size window with the app on the left, the Applications shortcut on the right, and an arrow between them, instead of Finder's default alphabetical icon grid. It's laid out with `dmgbuild`, which writes the layout directly rather than scripting Finder, so it works on CI.
+
 ## 0.2.3
 
 ### Patch Changes
